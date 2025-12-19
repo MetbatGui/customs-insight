@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+from src.domain.calculations.pipeline import process_trade_data
 
 class DataProcessor:
     def process(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -20,8 +21,6 @@ class DataProcessor:
             >>> print(result_df.columns)
             ['date', 'export_amount', 'export_mom', 'export_yoy']
         """
-        from domain.calculations.pipeline import process_trade_data
-        
         # 기존 순수 함수 파이프라인 사용 (Phase 3에서 작성됨)
         return process_trade_data(df)
 
