@@ -1,0 +1,9 @@
+name = "농심"
+
+[search]
+hs_code = "1902301010"
+target_text = "[1902301010] 라면"
+
+[filter1]
+type = "sido"
+data = ["부산"]
