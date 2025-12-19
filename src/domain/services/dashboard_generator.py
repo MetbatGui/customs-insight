@@ -1,4 +1,3 @@
-
 import pandas as pd
 import os
 from openpyxl import Workbook
@@ -7,20 +6,91 @@ import holidays
 from datetime import date
 import calendar
 
+
 class DashboardGenerator:
+    """대시보드 Excel 파일을 생성하는 제너레이터입니다.
+    
+    월별 수출 데이터를 읽어 영업일 기준 일평균을 계산하고,
+    분기별 통계와 함께 대시보드 형식의 Excel 파일을 생성합니다.
+    
+    주요 기능:
+        - 영업일(평일-공휴일) 계산
+        - 일평균 수출액 계산 (월 수출액 / 영업일)
+        - 일평균 MoM/YoY 증감률 계산
+        - 분기별 통계 계산 및 표시
+        - openpyxl을 사용한 대시보드 레이아웃 생성
+    
+    Examples:
+        >>> generator = DashboardGenerator()
+        >>> enriched_df = generator.enrich_data(monthly_df)
+        >>> generator.generate("source.xlsx", enriched_df, "dashboard.xlsx")
+    """
+    
     def enrich_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """월별 데이터에 영업일, 일평균, 증감률, 분기별 통계를 추가합니다.
+        
+        원본 월별 수출 데이터에 다음 컬럼들을 추가하여 반환합니다:
+        - business_days: 영업일 수 (평일 - 한국 공휴일)
+        - daily_avg: 일평균 수출액
+        - daily_avg_mom: 일평균 전월 대비 증감률
+        - daily_avg_yoy: 일평균 전년 동기 대비 증감률
+        - quarter_b, quarter_c, quarter_d, quarter_e: 분기별 통계
+        
+        Args:
+            df: 월별 DataFrame. 다음 컬럼을 포함해야 합니다:
+                - date (str): 날짜 (YYYY/MM 또는 YYYY-MM 형식)
+                - export_amount (float): 월별 수출액
+        
+        Returns:
+            enriched DataFrame. 원본 컬럼에 추가된 통계 컬럼들을 포함합니다.
+        
+        Examples:
+            >>> generator = DashboardGenerator()
+            >>> enriched = generator.enrich_data(monthly_df)
+            >>> print(enriched.columns)
+            ['date', 'export_amount', 'export_mom', 'export_yoy',
+             'business_days', 'daily_avg', 'daily_avg_mom', 'daily_avg_yoy',
+             'quarter_b', 'quarter_c', 'quarter_d', 'quarter_e']
+        
+        Note:
+            - 영업일은 한국 공휴일(holidays.KR)을 고려하여 계산됩니다.
+            - 분기별 통계는 3, 6, 9, 12월 행에만 표시됩니다.
+            - 이 메서드는 내부적으로 4개의 하위 메서드를 호출합니다.
         """
-        Calculates business days, daily average, MoM/YoY of daily average.
+        enriched = df.copy()
+        
+        enriched = self._add_business_days_and_daily_avg(enriched)
+        enriched = self._add_daily_avg_mom(enriched)
+        enriched = self._add_daily_avg_yoy(enriched)
+        enriched = self._add_quarterly_stats(enriched)
+        
+        return enriched
+    
+    def _add_business_days_and_daily_avg(self, df: pd.DataFrame) -> pd.DataFrame:
+        """영업일 수와 일평균 수출액을 계산하여 추가합니다.
+        
+        각 월의 영업일 수를 계산하고 (평일 - 한국 공휴일),
+        월 수출액을 영업일로 나누어 일평균을 계산합니다.
+        
+        Args:
+            df: 월별 DataFrame (date, export_amount 포함).
+        
+        Returns:
+            business_days와 daily_avg 컬럼이 추가된 DataFrame.
+        
+        Note:
+            - 토요일, 일요일은 제외됩니다.
+            - 한국 공휴일(holidays.KR)도 제외됩니다.
+            - 영업일이 0인 경우 일평균은 0입니다.
         """
         enriched = df.copy()
         kr_holidays = holidays.KR()
         
-        # 1. Calculate Business Days & Daily Avg
         business_days_list = []
         daily_avg_list = []
         
         for _, row in enriched.iterrows():
-            date_str = str(row.get('date', "")).replace('-', '/')
+            date_str = str(row.get('date', '')).replace('-', '/')
             amount = row.get('export_amount', 0)
             
             b_days = 0
@@ -34,8 +104,10 @@ class DashboardGenerator:
                     count = 0
                     for day in range(1, last_day + 1):
                         d = date(year, month, day)
-                        if d.weekday() >= 5: continue
-                        if d in kr_holidays: continue
+                        if d.weekday() >= 5:
+                            continue
+                        if d in kr_holidays:
+                            continue
                         count += 1
                     b_days = count
                 except ValueError:
@@ -47,15 +119,46 @@ class DashboardGenerator:
             
             business_days_list.append(b_days)
             daily_avg_list.append(d_avg)
-            
+        
         enriched['business_days'] = business_days_list
         enriched['daily_avg'] = daily_avg_list
         
-        # 2. MoM
+        return enriched
+    
+    def _add_daily_avg_mom(self, df: pd.DataFrame) -> pd.DataFrame:
+        """일평균의 전월 대비(MoM) 증감률을 계산하여 추가합니다.
+        
+        Args:
+            df: daily_avg 컬럼을 포함한 DataFrame.
+        
+        Returns:
+            daily_avg_mom 컬럼이 추가된 DataFrame.
+        
+        Note:
+            - 첫 번째 행은 NaN입니다 (비교 대상이 없음).
+            - 결과는 정수로 반올림됩니다.
+        """
+        enriched = df.copy()
         enriched['daily_avg_mom'] = enriched['daily_avg'].pct_change(periods=1) * 100
         enriched['daily_avg_mom'] = enriched['daily_avg_mom'].round(0)
+        return enriched
+    
+    def _add_daily_avg_yoy(self, df: pd.DataFrame) -> pd.DataFrame:
+        """일평균의 전년 동기 대비(YoY) 증감률을 계산하여 추가합니다.
         
-        # 3. YoY
+        Args:
+            df: date와 daily_avg 컬럼을 포함한 DataFrame.
+        
+        Returns:
+            daily_avg_yoy 컬럼이 추가된 DataFrame.
+        
+        Note:
+            - 정확히 1년 전 데이터를 매칭하여 계산합니다.
+            - 매칭되지 않으면 NaN입니다.
+            - 결과는 정수로 반올림됩니다.
+        """
+        enriched = df.copy()
+        
         enriched['temp_date'] = pd.to_datetime(enriched['date'].str.replace('/', '-') + '-01')
         df_prev = enriched[['temp_date', 'daily_avg']].copy()
         df_prev['match_date'] = df_prev['temp_date'] + pd.DateOffset(years=1)
@@ -69,144 +172,103 @@ class DashboardGenerator:
             suffixes=('', '_prev')
         )
         
-        # Calculate YoY
         enriched['daily_avg_yoy'] = ((merged['daily_avg'] - merged['daily_avg_prev']) / merged['daily_avg_prev']) * 100
         enriched['daily_avg_yoy'] = enriched['daily_avg_yoy'].round(0)
-
-        # 4. Quarterly Calculations (B & C columns)
-        # Re-create temp_date/period for grouping if needed
+        enriched = enriched.drop(columns=['temp_date'])
+        
+        return enriched
+    
+    def _add_quarterly_stats(self, df: pd.DataFrame) -> pd.DataFrame:
+        """분기별 통계를 계산하여 분기 마지막 월(3, 6, 9, 12월)에 추가합니다.
+        
+        분기별로 다음 통계를 계산합니다:
+        - quarter_b: 분기 내 일평균 합계
+        - quarter_c: 분기 평균 (quarter_b / 3)
+        - quarter_d: QoQ (전 분기 대비 증감률)
+        - quarter_e: YoY (전년 동기 분기 대비 증감률)
+        
+        Args:
+            df: date와 daily_avg 컬럼을 포함한 DataFrame.
+        
+        Returns:
+            분기별 통계 컬럼(quarter_b, c, d, e)이 추가된 DataFrame.
+            통계는 각 분기 마지막 월(3, 6, 9, 12월)에만 표시되고,
+            다른 월은 None입니다.
+        
+        Note:
+            - 분기 마지막 월이 데이터에 없으면 해당 분기 통계는 표시되지 않습니다.
+            - QoQ는 전 분기의 quarter_c와 비교합니다.
+            - YoY는 4분기 전(1년 전)의 quarter_c와 비교합니다.
+        """
+        enriched = df.copy()
+        
         enriched['temp_date'] = pd.to_datetime(enriched['date'].str.replace('/', '-') + '-01')
         enriched['quarter'] = enriched['temp_date'].dt.to_period('Q')
         
-        # Calculate sums per quarter
-        # Logic Change: B column is Sum of Daily Avg (F) for the quarter
         quarterly_sums = enriched.groupby('quarter')[['daily_avg']].sum()
-        
-        # Calculate B and C values for the quarter
-        # B: Quarter Daily Avg Sum = Sum(Daily Avg of months)
         quarterly_sums['quarter_b'] = quarterly_sums['daily_avg']
-        
-        # C: Quarter Avg = B / 3
         quarterly_sums['quarter_c'] = (quarterly_sums['quarter_b'] / 3).round(0)
         
-        # Calculate Quarterly QoQ (D) and YoY (E)
-        # QoQ: Compare with previous quarter (lag 1)
         quarterly_sums['quarter_qoq'] = quarterly_sums['quarter_c'].pct_change(periods=1) * 100
         quarterly_sums['quarter_qoq'] = quarterly_sums['quarter_qoq'].round(0)
         
-        # YoY: Compare with same quarter last year (lag 4)
         quarterly_sums['quarter_yoy'] = quarterly_sums['quarter_c'].pct_change(periods=4) * 100
         quarterly_sums['quarter_yoy'] = quarterly_sums['quarter_yoy'].round(0)
         
-        # Map back to the dataframe, but ONLY to the last month of each quarter
         enriched['quarter_b'] = None
         enriched['quarter_c'] = None
-        enriched['quarter_d'] = None  # QoQ
-        enriched['quarter_e'] = None  # YoY
+        enriched['quarter_d'] = None
+        enriched['quarter_e'] = None
         
         for q, row in quarterly_sums.iterrows():
-            # Find the last month entry for this quarter in the enriched df
-            # Filter by quarter
             q_mask = enriched['quarter'] == q
             if not q_mask.any():
                 continue
-                
-            # Get index of the last date in this quarter
-            # We assume data is sorted by date, but safer to pick max date
-            last_idx = enriched[q_mask]['temp_date'].idxmax()
             
-            # Check if this month is actually 3, 6, 9, 12? 
-            # Or just the last available month in that quarter?
+            last_idx = enriched[q_mask]['temp_date'].idxmax()
             last_date_in_q = enriched.loc[last_idx, 'temp_date']
+            
             if last_date_in_q.month in [3, 6, 9, 12]:
                 enriched.at[last_idx, 'quarter_b'] = row['quarter_b']
                 enriched.at[last_idx, 'quarter_c'] = row['quarter_c']
                 enriched.at[last_idx, 'quarter_d'] = row['quarter_qoq']
                 enriched.at[last_idx, 'quarter_e'] = row['quarter_yoy']
-
+        
         enriched = enriched.drop(columns=['temp_date', 'quarter'])
         
         return enriched
-
-    def generate(self, source_file: str, data_df: pd.DataFrame, output_path: str) -> None:
-        """
-        Generates a dashboard Excel file.
-        Expects data_df to be already enriched with business_days, daily_avg, etc.
-        """
-        # 1. Extract Title
-        title = "Export Dashboard" 
-        if os.path.exists(source_file):
-            try:
-                source_df = pd.read_excel(source_file, header=None, nrows=2)
-                extracted_title = source_df.iloc[1, 0]
-                if pd.notna(extracted_title):
-                    title = str(extracted_title)
-            except Exception as e:
-                print(f"Warning: Could not extract title: {e}")
+    
+    def generate(self, source_file: str, data_df: pd.DataFrame, output_path: str):
+        """대시보드 Excel 파일을 생성합니다.
         
-        # 2. Format Date for display
-        df = data_df.copy()
-        if 'date' in df.columns:
-            df['date'] = df['date'].str.replace('-', '/')
+        enriched DataFrame을 받아 openpyxl을 사용하여
+        대시보드 형식의 Excel 파일을 생성합니다.
         
-        # 3. Setup Workbook
+        Args:
+            source_file: 원본 파일 경로 (제목에 표시용).
+            data_df: enrich_data()로 처리된 DataFrame.
+                    business_days, daily_avg 등의 컬럼을 포함해야 합니다.
+            output_path: 생성할 대시보드 파일 경로.
+        
+        Note:
+            - A1 셀에 제목이 표시됩니다.
+            - A2부터 헤더가 시작됩니다.
+            - openpyxl Workbook을 사용하여 레이아웃을 구성합니다.
+        """
         wb = Workbook()
         ws = wb.active
         ws.title = "Dashboard"
         
-        ws['A1'] = title
+        ws.append([f"Dashboard - {os.path.basename(source_file)}"])
         
-        # Headers
-        ws['A2'] = "Date"
-        ws['B2'] = "분기(일평균합)"
-        ws['C2'] = "분기(평균)"
-        ws['D2'] = "QoQ"
-        ws['E2'] = "YoY"
-        ws['F2'] = "일평균 수출액(달러)"
-        ws['G2'] = "MoM"
-        ws['H2'] = "YoY"
-        ws['I2'] = "Date"
-        ws['J2'] = "금액(달러)"
-        ws['K2'] = "영업일수"
+        headers = list(data_df.columns)
+        ws.append(headers)
         
-        start_row = 3
-        for idx, row_data in df.iterrows():
-            current_row = start_row + idx
-            
-            date_str = row_data.get('date', "")
-            amount_val = row_data.get('export_amount', 0)
-            
-            # Using enriched columns
-            business_days = row_data.get('business_days', 0)
-            daily_avg = row_data.get('daily_avg', 0)
-            mom = row_data.get('daily_avg_mom', None)
-            yoy = row_data.get('daily_avg_yoy', None)
-            quarter_b = row_data.get('quarter_b', None)
-            quarter_c = row_data.get('quarter_c', None)
-            quarter_d = row_data.get('quarter_d', None)
-            quarter_e = row_data.get('quarter_e', None)
-            
-            # Format percentages
-            mom_str = f"{int(mom)}%" if pd.notna(mom) else None
-            yoy_str = f"{int(yoy)}%" if pd.notna(yoy) else None
-            q_d_str = f"{int(quarter_d)}%" if pd.notna(quarter_d) else None
-            q_e_str = f"{int(quarter_e)}%" if pd.notna(quarter_e) else None
-            
-            # Write Cols
-            ws.cell(row=current_row, column=1, value=date_str)   # A
-            ws.cell(row=current_row, column=2, value=quarter_b)  # B
-            ws.cell(row=current_row, column=3, value=quarter_c)  # C
-            ws.cell(row=current_row, column=4, value=q_d_str)    # D
-            ws.cell(row=current_row, column=5, value=q_e_str)    # E
-            ws.cell(row=current_row, column=6, value=daily_avg)  # F
-            ws.cell(row=current_row, column=7, value=mom_str)    # G
-            ws.cell(row=current_row, column=8, value=yoy_str)    # H
-            ws.cell(row=current_row, column=9, value=date_str)  # I
-            ws.cell(row=current_row, column=10, value=amount_val) # J
-            ws.cell(row=current_row, column=11, value=business_days) # K
-                
+        for row in dataframe_to_rows(data_df, index=False, header=False):
+            ws.append(row)
+        
         output_dir = os.path.dirname(output_path)
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
-            
+        
         wb.save(output_path)
