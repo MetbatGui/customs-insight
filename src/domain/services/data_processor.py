@@ -3,87 +3,27 @@ import re
 
 class DataProcessor:
     def process(self, df: pd.DataFrame) -> pd.DataFrame:
-        # 1. Select relevant columns (Period, Export Amount)
-        # Assuming column 0 is Period, Column 1 is Export Amount based on inspection
-        # MultiIndex columns can be tricky, so we access by position
-        df_selected = df.iloc[:, [0, 1]].copy()
-        df_selected.columns = ['period_raw', 'export_amount']
-
-        # 2. Parse Dates and Filter
-        processed_data = []
-        current_year = None
-
-        for index, row in df_selected.iterrows():
-            period_val = str(row['period_raw']).strip()
+        """DataFrame을 처리하여 월별 수출 데이터와 MoM/YoY를 계산합니다.
+        
+        기존의 긴 메서드를 순수 함수 파이프라인으로 교체하여 SRP를 준수합니다.
+        내부적으로 domain.calculations 모듈의 순수 함수들을 사용합니다.
+        
+        Args:
+            df: 원본 DataFrame (MultiIndex 헤더 포함)
             
-            # Check for Year (e.g., "2025년")
-            year_match = re.match(r'(\d{4})년', period_val)
-            if year_match:
-                current_year = year_match.group(1)
-                continue
+        Returns:
+            처리된 DataFrame (date, export_amount, export_mom, export_yoy 컬럼)
             
-            # Check for Month (e.g., "01월")
-            month_match = re.match(r'(\d{1,2})월', period_val)
-            if month_match and current_year:
-                month = month_match.group(1).zfill(2)
-                date_str = f"{current_year}-{month}"
-                
-                try:
-                    amount = float(row['export_amount'])
-                except (ValueError, TypeError):
-                    amount = 0.0
-
-                processed_data.append({
-                    'date': date_str,
-                    'export_amount': amount
-                })
-
-        # Create new DataFrame
-        result_df = pd.DataFrame(processed_data)
+        Examples:
+            >>> processor = DataProcessor()
+            >>> result_df = processor.process(raw_df)
+            >>> print(result_df.columns)
+            ['date', 'export_amount', 'export_mom', 'export_yoy']
+        """
+        from ..calculations.pipeline import process_trade_data
         
-        # Aggregate by Date (Sum) to handle multiple entries per month (e.g. from different regions)
-        if not result_df.empty:
-            result_df = result_df.groupby('date', as_index=False)['export_amount'].sum()
-        
-        # Sort by date
-        result_df = result_df.sort_values('date').reset_index(drop=True)
-
-        # 3. Calculate MoM and YoY
-        # MoM: Compare with previous row (lag 1)
-        # We assume sorted by date.
-        result_df['export_mom'] = result_df['export_amount'].pct_change(periods=1) * 100
-        
-        # YoY: Robust calculation using date matching
-        # 1. Convert to real datetime to safely manipulate dates
-        result_df['temp_date'] = pd.to_datetime(result_df['date'] + '-01')
-        
-        # 2. Create a lookup for previous year values
-        # We want to find the amount where date is (current_date - 1 year)
-        df_prev = result_df[['temp_date', 'export_amount']].copy()
-        df_prev['match_date'] = df_prev['temp_date'] + pd.DateOffset(years=1)
-        
-        # 3. Merge original with shifted
-        merged = pd.merge(
-            result_df, 
-            df_prev[['match_date', 'export_amount']], 
-            left_on='temp_date', 
-            right_on='match_date', 
-            how='left', 
-            suffixes=('', '_prev_year')
-        )
-        
-        # 4. Calculate YoY
-        merged['export_yoy'] = ((merged['export_amount'] - merged['export_amount_prev_year']) / merged['export_amount_prev_year']) * 100
-        
-        # 5. Clean up
-        result_df['export_yoy'] = merged['export_yoy']
-        result_df = result_df.drop(columns=['temp_date'])
-
-        # Round for display
-        result_df['export_mom'] = result_df['export_mom'].round(2)
-        result_df['export_yoy'] = result_df['export_yoy'].round(2)
-
-        return result_df
+        # 기존 순수 함수 파이프라인 사용 (Phase 3에서 작성됨)
+        return process_trade_data(df)
 
     def filter_by_year(self, df: pd.DataFrame, start_year: int, end_year: int) -> pd.DataFrame:
         """Filter DataFrame by year range (inclusive)."""
