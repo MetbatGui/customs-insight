@@ -1,6 +1,4 @@
 import time
-import os
-import pandas as pd
 from playwright.sync_api import Page
 from .scraper_strategy import ScraperStrategy
 
@@ -9,80 +7,52 @@ class SingleFilterStrategy(ScraperStrategy):
         """
         Executes standard search and downloads file to save_path_dir.
         """
-        # Default Strategy
-        hs_code = "8504230000"
-        target_text = "[8504230000] 용량이 10,000킬로볼트암페어를 초과하는 것"
-        strategy_name = ""
+        # Config 파싱 (공통 메서드 사용)
+        config = self._parse_config(strategy_config)
+        hs_code = config['hs_code']
+        target_text = config.get('target_text') or "[8504230000] 용량이 10,000킬로볼트암페어를 초과하는 것"
+        strategy_name = config['strategy_name']
         
-        if strategy_config and 'search' in strategy_config:
-            hs_code = strategy_config['search'].get('hs_code', hs_code)
-            target_text = strategy_config['search'].get('target_text', target_text)
-            if 'name' in strategy_config:
-                strategy_name = f"_{strategy_config['name']}"
-
-        # Search URL
+        # URL 이동 (공통 메서드 사용)
         url = "https://www.bandtrass.or.kr/customs/total.do?command=CUS001View&viewCode=CUS00201"
         print(f"[SingleFilterStrategy] Navigating to {url}")
-        page.goto(url)
-        page.wait_for_load_state('networkidle')
+        self._navigate_to_url(page, url)
 
-        # Items
+        # Items 선택
         page.get_by_text("품목/성질별/신성질별").click()
         page.wait_for_selector("#GODS_TYPE", state="visible")
         page.select_option("#GODS_TYPE", value="H")
 
-        # Popup - Search Item
+        # 팝업 처리 (공통 메서드 사용)
         print("[SingleFilterStrategy] Opening Item Search Popup...")
-        page.wait_for_selector("#POPUP1", state="visible")
-        with page.expect_popup() as popup_info:
-            page.click("#POPUP1")
+        popup = self._open_item_search_popup(page)
         
-        popup = popup_info.value
-        popup.wait_for_load_state()
-
-        # Input Code
         print(f"[SingleFilterStrategy] Searching HS Code: {hs_code}")
-        popup.wait_for_selector("#CustomText")
-        popup.fill("#CustomText", hs_code)
-        popup.click("#CustomCheck")
-        time.sleep(0.5)
-
-        # Apply
-        try:
-            with popup.expect_event("close"):
-                popup.get_by_text("선택적용", exact=True).click()
-        except:
-            if not popup.is_closed():
-                popup.get_by_text("선택적용", exact=True).click()
+        self._search_hs_code_in_popup(popup, hs_code)
         
-        # Search
+        self._apply_popup_selection(popup)
+        
+        # Search 버튼 클릭
         print("[SingleFilterStrategy] Clicking Search Button...")
         try:
              page.click("button[onclick*='goSearch']")
         except:
              page.click("button.btn-ok")
 
-        # Wait for Grid and Find Detail Cell
+        # 결과 대기 및 상세 셀 찾기
         print(f"[SingleFilterStrategy] Waiting for results and finding detail cell: {target_text}")
         cell_locator = page.get_by_text(target_text)
         cell_locator.wait_for(state="visible", timeout=10000)
         
-        # Open Detail Popup
+        # 상세 팝업 열기
         with page.expect_popup() as detail_popup_info:
             cell_locator.click()
         
         detail_popup = detail_popup_info.value
         detail_popup.wait_for_load_state()
-        
-        # Attach dialog listener (handled by adapter context usually, but good to ensure)
-        # Assuming adapter attached global listener, but valid to attach here if specific to popup persistence
-        # For now, we rely on the clean structure. Context (Adapter) handles browser-wide events if possible,
-        # but popup new pages might need re-attachment. 
-        # Ideally, we pass a callback or specific handler if needed.
-        # Let's attach a simple acceptor to be safe, or assume the main page listener covers if contexts match.
         detail_popup.on("dialog", lambda d: d.accept())
 
-        # Download
+        # 다운로드
         print("[SingleFilterStrategy] Clicking GridtoExcel...")
         
         saved_download = None
@@ -98,30 +68,10 @@ class SingleFilterStrategy(ScraperStrategy):
                  saved_download = download_info_popup.value
 
         if saved_download:
-            timestamp = int(time.time())
-            filename_xls = f"bandtrass_{timestamp}{strategy_name}.xls"
-            full_path_xls = os.path.join(save_path_dir, filename_xls)
-            saved_download.save_as(full_path_xls)
-            print(f"[SingleFilterStrategy] Download Success: {full_path_xls}")
+            print(f"[SingleFilterStrategy] Download Success")
             detail_popup.close()
             
-            # Conversion
-            try:
-                print("[SingleFilterStrategy] Converting XLS to XLSX...")
-                # Note: 'pd' imported at top
-                df = pd.read_excel(full_path_xls)
-                
-                filename_xlsx = f"bandtrass_{timestamp}.xlsx"
-                full_path_xlsx = os.path.join(save_path_dir, filename_xlsx)
-                
-                df.to_excel(full_path_xlsx, index=False)
-                print(f"[SingleFilterStrategy] Saved as: {full_path_xlsx}")
-                os.remove(full_path_xls)
-                
-                return full_path_xlsx
-                
-            except Exception as e:
-                print(f"[SingleFilterStrategy] Conversion Failed: {e}")
-                return full_path_xls
+            # 다운로드 저장 및 변환 (공통 메서드 사용)
+            return self._save_download(saved_download, save_path_dir, strategy_name)
         else:
             raise Exception("Download failed in SingleFilterStrategy")
