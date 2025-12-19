@@ -56,6 +56,7 @@ class DashboardGenerator:
             - 영업일은 한국 공휴일(holidays.KR)을 고려하여 계산됩니다.
             - 분기별 통계는 3, 6, 9, 12월 행에만 표시됩니다.
             - 이 메서드는 내부적으로 4개의 하위 메서드를 호출합니다.
+            - generate() 메서드에서 칼럼명을 한글로 변환합니다.
         """
         enriched = df.copy()
         
@@ -243,6 +244,7 @@ class DashboardGenerator:
         
         enriched DataFrame을 받아 openpyxl을 사용하여
         대시보드 형식의 Excel 파일을 생성합니다.
+        칼럼명을 한글로 변환하여 가독성을 높입니다.
         
         Args:
             source_file: 원본 파일 경로 (제목에 표시용).
@@ -253,18 +255,37 @@ class DashboardGenerator:
         Note:
             - A1 셀에 제목이 표시됩니다.
             - A2부터 헤더가 시작됩니다.
+            - 모든 칼럼명이 한글로 변환됩니다.
             - openpyxl Workbook을 사용하여 레이아웃을 구성합니다.
         """
+        column_mapping = {
+            'date': '날짜',
+            'export_amount': '수출액(달러)',
+            'export_mom': 'MoM(%)',
+            'export_yoy': 'YoY(%)',
+            'business_days': '영업일',
+            'daily_avg': '일평균(달러)',
+            'daily_avg_mom': '일평균 MoM(%)',
+            'daily_avg_yoy': '일평균 YoY(%)',
+            'quarter_b': '분기합계(B)',
+            'quarter_c': '분기평균(C)',
+            'quarter_d': 'QoQ(%)',
+            'quarter_e': '분기 YoY(%)'
+        }
+        
+        display_df = data_df.copy()
+        display_df = display_df.rename(columns=column_mapping)
+        
         wb = Workbook()
         ws = wb.active
         ws.title = "Dashboard"
         
         ws.append([f"Dashboard - {os.path.basename(source_file)}"])
         
-        headers = list(data_df.columns)
+        headers = list(display_df.columns)
         ws.append(headers)
         
-        for row in dataframe_to_rows(data_df, index=False, header=False):
+        for row in dataframe_to_rows(display_df, index=False, header=False):
             ws.append(row)
         
         output_dir = os.path.dirname(output_path)
