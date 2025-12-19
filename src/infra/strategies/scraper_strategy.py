@@ -135,7 +135,7 @@ class ScraperStrategy(ABC):
         Args:
             download: Playwright Download 객체.
             save_path_dir: 저장 디렉토리.
-            strategy_name: Strategy 이름 (파일명에 추가).
+            strategy_name: Strategy 이름 (파일명에 추가, "_" 포함).
         
         Returns:
             Result[str, str]:
@@ -146,16 +146,20 @@ class ScraperStrategy(ABC):
             >>> result = self._save_download_safe(download, "data", "_삼양")
             >>> if isinstance(result, Success):
             ...     print(f"Saved: {result.unwrap()}")
+        
+        Note:
+            파일명 형식: bandtrass{strategy_name}_SingleFilter.xls
+            예: bandtrass_삼양_SingleFilter.xls
         """
         try:
-            timestamp = int(time.time())
-            filename_xls = f"bandtrass_{timestamp}{strategy_name}.xls"
+            filter_type = self.__class__.__name__.replace("Strategy", "")
+            filename_xls = f"bandtrass{strategy_name}_{filter_type}.xls"
             full_path_xls = os.path.join(save_path_dir, filename_xls)
             
             download.save_as(full_path_xls)
             print(f"[ScraperStrategy] Download saved: {full_path_xls}")
             
-            return self._convert_xls_to_xlsx_safe(full_path_xls, save_path_dir, timestamp)
+            return self._convert_xls_to_xlsx_safe(full_path_xls, save_path_dir, strategy_name, filter_type)
             
         except Exception as e:
             return Failure(f"Download save failed: {str(e)}")
@@ -164,7 +168,8 @@ class ScraperStrategy(ABC):
         self,
         xls_path: str,
         save_dir: str,
-        timestamp: int
+        strategy_name: str,
+        filter_type: str
     ) -> str:
         """XLS 파일을 XLSX로 변환합니다.
         
@@ -174,7 +179,8 @@ class ScraperStrategy(ABC):
         Args:
             xls_path: XLS 파일 경로.
             save_dir: 저장 디렉토리.
-            timestamp: 타임스탬프 (파일명에 사용).
+            strategy_name: Strategy 이름.
+            filter_type: 필터 타입 (예: "SingleFilter").
         
         Returns:
             XLSX 파일 경로. 실패 시 원본 XLS 경로.
@@ -182,14 +188,15 @@ class ScraperStrategy(ABC):
         Note:
             하위 호환성을 위해 유지하는 메서드입니다.
         """
-        result = self._convert_xls_to_xlsx_safe(xls_path, save_dir, timestamp)
+        result = self._convert_xls_to_xlsx_safe(xls_path, save_dir, strategy_name, filter_type)
         return result.value_or(xls_path)
     
     def _convert_xls_to_xlsx_safe(
         self,
         xls_path: str,
         save_dir: str,
-        timestamp: int
+        strategy_name: str,
+        filter_type: str
     ) -> Result[str, str]:
         """XLS 파일을 XLSX로 변환합니다 (Result 타입).
         
@@ -199,7 +206,8 @@ class ScraperStrategy(ABC):
         Args:
             xls_path: XLS 파일 경로.
             save_dir: 저장 디렉토리.
-            timestamp: 타임스탬프 (파일명에 사용).
+            strategy_name: Strategy 이름 (예: "_삼양").
+            filter_type: 필터 타입 (예: "SingleFilter").
         
         Returns:
             Result[str, str]:
@@ -208,12 +216,13 @@ class ScraperStrategy(ABC):
         
         Note:
             변환 실패 시 원본 XLS 파일은 그대로 유지됩니다.
+            파일명 형식: bandtrass{strategy_name}_{filter_type}.xlsx
         """
         try:
             print("[ScraperStrategy] Converting XLS to XLSX...")
             df = pd.read_excel(xls_path)
             
-            filename_xlsx = f"bandtrass_{timestamp}.xlsx"
+            filename_xlsx = f"bandtrass{strategy_name}_{filter_type}.xlsx"
             full_path_xlsx = os.path.join(save_dir, filename_xlsx)
             
             df.to_excel(full_path_xlsx, index=False)
