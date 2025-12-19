@@ -122,95 +122,11 @@ class DualFilterStrategy(ScraperStrategy):
 
         downloaded_files = []
 
-        # 4. Iteration: Find Region in Results -> Download
+        # 4. Iteration: Find Region in Results -> Download (리팩토링: 메서드 사용)
         for filter_value in filter_data_list:
-            print(f"\n[DualFilterStrategy] Processing Region: {filter_value}")
-            
-            try:
-                # Find the row/cell that contains the Region Name using precise selectors based on HTML snippet
-                # HTML: <td ... title="강원" ...><font ...>강원</font></td>
-                
-                # 1. Try finding by title attribute (most robust based on snippet)
-                # Click the FONT tag inside the TD because it has cursor:pointer
-                target_region_locator = page.locator(f"td[role='gridcell'][title='{filter_value}'] font")
-                
-                # 2. Fallback: Try finding by text inside font tag if title doesn't match
-                if target_region_locator.count() == 0:
-                     target_region_locator = page.locator(f"td[role='gridcell'] font:text-is('{filter_value}')")
-                
-                if target_region_locator.count() > 0:
-                    print(f"[DualFilterStrategy] Found target region: {filter_value}")
-                    
-                    # Click to open detail popup
-                    with page.expect_popup() as popup_info:
-                        # Force click if needed, or normal click
-                        target_region_locator.first.click()
-                    
-                    detail_popup = popup_info.value
-                    detail_popup.wait_for_load_state()
-                    print(f"[DualFilterStrategy] Detail popup opened for {filter_value}")
-
-                    try:
-                        # Attach dialog listener to auto-accept confirm() for download
-                        detail_popup.on("dialog", lambda dialog: dialog.accept())
-                        
-                        # Wait for data to load in popup
-                        try:
-                            detail_popup.wait_for_selector("td[role='gridcell']", timeout=15000)
-                        except:
-                            detail_popup.wait_for_selector("td", timeout=15000)
-
-                        # Download Excel from Popup
-                        # Use expect_download for more reliable download handling
-                        try:
-                            # Find and click download button with download expectation
-                            with detail_popup.expect_download(timeout=60000) as download_info:
-                                # Find and click download button
-                                grid_excel_btn = detail_popup.locator("a[href*='GridtoExcel']")
-                                if grid_excel_btn.count() > 0:
-                                    grid_excel_btn.first.click(force=True)
-                                elif detail_popup.get_by_text("다운로드").count() > 0:
-                                    btn = detail_popup.get_by_text("다운로드")
-                                    btn.first.click(force=True)
-                                else:
-                                    btn = detail_popup.locator("button").filter(has_text="다운로드")
-                                    btn.first.click(force=True)
-                            
-                            # Wait for download to complete
-                            download = download_info.value
-                            print(f"[DualFilterStrategy] Download started: {download.suggested_filename}")
-                            
-                            # Save the downloaded file
-                            # Extract extension from suggested filename
-                            suggested_name = download.suggested_filename
-                            file_ext = os.path.splitext(suggested_name)[1] or ".xls"
-                            
-                            timestamp = int(time.time())
-                            filename = f"temp_{strategy_name}_{filter_value}_{timestamp}{file_ext}"
-                            save_path = os.path.join(save_path_dir, filename)
-                            download.save_as(save_path)
-                            downloaded_files.append((save_path, filter_value))
-                            print(f"[DualFilterStrategy] Downloaded: {save_path}")
-                            
-                        except Exception as dl_error:
-                            print(f"[DualFilterStrategy] Download failed: {dl_error}")
-                            raise dl_error
-                    
-                    except Exception as popup_e:
-                        print(f"[DualFilterStrategy] Error inside popup for {filter_value}: {popup_e}")
-                    
-                    finally:
-                        try:
-                            detail_popup.close()
-                            print(f"[DualFilterStrategy] Closed popup for {filter_value}")
-                        except:
-                            pass
-
-                else:
-                    print(f"[DualFilterStrategy] Region '{filter_value}' not found in search results.")
-            
-            except Exception as e:
-                print(f"[DualFilterStrategy] Error processing {filter_value}: {e}")
+            result = self._download_region_data(page, filter_value, save_path_dir, strategy_name)
+            if result:
+                downloaded_files.append(result)
 
         # 5. Merge Files and Create Unified Report using DataProcessor
         if not downloaded_files:
@@ -265,3 +181,120 @@ class DualFilterStrategy(ScraperStrategy):
                 print(f"  - Failed to remove {os.path.basename(file)}: {e}")
         
         return report_path
+    
+    # ========== 지역별 다운로드 메서드 ==========
+    
+    def _find_region_cell(self, page: Page, region_name: str):
+        """
+        특정 지역의 셀(Locator)을 찾기
+        
+        Args:
+            page: Playwright Page 객체
+            region_name: 지역 이름 (예: "부산", "경남")
+            
+        Returns:
+            Locator 객체 (찾지 못하면 count()가 0)
+        """
+        # 1. Try finding by title attribute
+        locator = page.locator(f"td[role='gridcell'][title='{region_name}'] font")
+        
+        # 2. Fallback: Try finding by text
+        if locator.count() == 0:
+            locator = page.locator(f"td[role='gridcell'] font:text-is('{region_name}')")
+        
+        return locator
+    
+    def _download_region_data(
+        self,
+        page: Page,
+        region_name: str,
+        save_dir: str,
+        strategy_name: str
+    ) -> tuple[str, str] | None:
+        """
+        특정 지역의 데이터를 다운로드
+        
+        Args:
+            page: Playwright Page 객체
+            region_name: 지역 이름
+            save_dir: 저장 디렉토리
+            strategy_name: Strategy 이름 (파일명에 사용)
+            
+        Returns:
+            (파일 경로, 지역 이름) 튜플 또는 None (실패 시)
+        """
+        print(f"\n[DualFilterStrategy] Processing Region: {region_name}")
+        
+        try:
+            # 1. 지역 셀 찾기
+            target_region_locator = self._find_region_cell(page, region_name)
+            
+            if target_region_locator.count() == 0:
+                print(f"[DualFilterStrategy] Region '{region_name}' not found in search results.")
+                return None
+            
+            print(f"[DualFilterStrategy] Found target region: {region_name}")
+            
+            # 2. 상세 팝업 열기
+            with page.expect_popup() as popup_info:
+                target_region_locator.first.click()
+            
+            detail_popup = popup_info.value
+            detail_popup.wait_for_load_state()
+            print(f"[DualFilterStrategy] Detail popup opened for {region_name}")
+            
+            try:
+                # 3. Dialog 자동 수락
+                detail_popup.on("dialog", lambda dialog: dialog.accept())
+                
+                # 4. 데이터 로드 대기
+                try:
+                    detail_popup.wait_for_selector("td[role='gridcell']", timeout=15000)
+                except:
+                    detail_popup.wait_for_selector("td", timeout=15000)
+                
+                # 5. 다운로드 실행
+                try:
+                    with detail_popup.expect_download(timeout=60000) as download_info:
+                        # 다운로드 버튼 찾기 및 클릭
+                        grid_excel_btn = detail_popup.locator("a[href*='GridtoExcel']")
+                        if grid_excel_btn.count() > 0:
+                            grid_excel_btn.first.click(force=True)
+                        elif detail_popup.get_by_text("다운로드").count() > 0:
+                            detail_popup.get_by_text("다운로드").first.click(force=True)
+                        else:
+                            detail_popup.locator("button").filter(has_text="다운로드").first.click(force=True)
+                    
+                    download = download_info.value
+                    print(f"[DualFilterStrategy] Download started: {download.suggested_filename}")
+                    
+                    # 6. 파일 저장
+                    suggested_name = download.suggested_filename
+                    file_ext = os.path.splitext(suggested_name)[1] or ".xls"
+                    
+                    timestamp = int(time.time())
+                    filename = f"temp_{strategy_name}_{region_name}_{timestamp}{file_ext}"
+                    save_path = os.path.join(save_dir, filename)
+                    download.save_as(save_path)
+                    
+                    print(f"[DualFilterStrategy] Downloaded: {save_path}")
+                    return (save_path, region_name)
+                    
+                except Exception as dl_error:
+                    print(f"[DualFilterStrategy] Download failed: {dl_error}")
+                    raise dl_error
+            
+            except Exception as popup_e:
+                print(f"[DualFilterStrategy] Error inside popup for {region_name}: {popup_e}")
+                return None
+            
+            finally:
+                try:
+                    detail_popup.close()
+                    print(f"[DualFilterStrategy] Closed popup for {region_name}")
+                except:
+                    pass
+        
+        except Exception as e:
+            print(f"[DualFilterStrategy] Error processing {region_name}: {e}")
+            return None
