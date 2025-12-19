@@ -5,10 +5,52 @@ from playwright.sync_api import Page
 from .scraper_strategy import ScraperStrategy
 
 class DualFilterStrategy(ScraperStrategy):
+    """이중 필터 기반 스크래핑 전략입니다.
+    
+    이 전략은 HS Code로 품목을 검색한 후, 여러 지역(필터)에 대해
+    반복적으로 데이터를 다운로드하고 병합합니다.
+    
+    주요 동작:
+        1. 지역별 검색 페이지로 이동
+        2. HS Code 및 지역 설정
+        3. 각 지역별로 반복:
+           - 지역 셀 클릭
+           - 상세 데이터 다운로드
+        4. 모든 파일 병합
+        5. Reports 디렉토리에 통합 리포트 저장
+    
+    Examples:
+        >>> config = {
+        ...     'search': {'hs code': '8504230000'},
+        ...     'filter1': {'type': 'sido', 'data': ['부산', '경남']},
+        ...     'name': '삼양'
+        ... }
+        >>> strategy = DualFilterStrategy()
+        >>> report_path = strategy.execute(page, "data", config)
+    """
+    
     def execute(self, page: Page, save_path_dir: str, strategy_config: dict = None) -> str:
-        """
-        Executes search with dual filters (basic search + 1 iteration filter) within the same session.
-        Iterates over filter1 data, downloads files, and merges them.
+        """이중 필터 검색을 실행하고 통합 리포트를 생성합니다.
+        
+        여러 지역에 대해 반복적으로 데이터를 다운로드하고,
+        모든 데이터를 병합하여 하나의 리포트 파일로 생성합니다.
+        
+        Args:
+            page: 이미 로그인된 Playwright Page 객체.
+            save_path_dir: 임시 파일을 저장할 디렉토리 (자동 삭제됨).
+            strategy_config: Strategy 설정 딕셔너리. 다음을 포함해야 함:
+                - search.hs_code: 검색할 HS Code
+                - filter1.type: 필터 타입 (예: "sido")
+                - filter1.data: 지역 리스트 (예: ["부산", "경남"])
+                - name: Strategy 이름
+        
+        Returns:
+            생성된 통합 리포트 파일의 전체 경로 (reports/ 디렉토리).
+            실패 시 빈 문자열.
+        
+        Note:
+            - 임시 다운로드 파일은 병합 후 자동으로 삭제됩니다.
+            - 최종 리포트는 DataProcessor로 처리되어 MoM/YoY가 포함됩니다.
         """
         print("[DualFilterStrategy] Strategy Config:", strategy_config)
         
