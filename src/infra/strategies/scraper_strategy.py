@@ -5,6 +5,7 @@ import os
 import pandas as pd
 from typing import Dict, Any, Optional
 from pathlib import Path
+from returns.result import Result, Success, Failure, safe
 
 
 class ScraperStrategy(ABC):
@@ -77,7 +78,9 @@ class ScraperStrategy(ABC):
         strategy_name: str = ""
     ) -> str:
         """
-        다운로드 파일 저장 및 XLS → XLSX 변환
+        다운로드 파일 저장 및 XLS → XLSX 변환 (기존 인터페이스)
+        
+        하위 호환성을 위해 유지. 내부적으로 _save_download_safe 사용
         
         Args:
             download: Playwright Download 객체
@@ -87,16 +90,42 @@ class ScraperStrategy(ABC):
         Returns:
             저장된 XLSX 파일 경로 (변환 실패 시 XLS 경로)
         """
-        timestamp = int(time.time())
-        filename_xls = f"bandtrass_{timestamp}{strategy_name}.xls"
-        full_path_xls = os.path.join(save_path_dir, filename_xls)
+        result = self._save_download_safe(download, save_path_dir, strategy_name)
+        return result.value_or("")
+    
+    def _save_download_safe(
+        self,
+        download: Download,
+        save_path_dir: str,
+        strategy_name: str = ""
+    ) -> Result[str, str]:
+        """
+        다운로드 파일 저장 및 XLS → XLSX 변환 (Result 타입)
         
-        # XLS 파일 저장
-        download.save_as(full_path_xls)
-        print(f"[ScraperStrategy] Download saved: {full_path_xls}")
-        
-        # XLS → XLSX 변환 시도
-        return self._convert_xls_to_xlsx(full_path_xls, save_path_dir, timestamp)
+        Args:
+            download: Playwright Download 객체
+            save_path_dir: 저장 디렉토리
+            strategy_name: Strategy 이름 (파일명에 사용)
+            
+        Returns:
+            Result[str, str]
+            - Success: 저장된 XLSX 파일 경로
+            - Failure: 에러 메시지
+        """
+        try:
+            timestamp = int(time.time())
+            filename_xls = f"bandtrass_{timestamp}{strategy_name}.xls"
+            full_path_xls = os.path.join(save_path_dir, filename_xls)
+            
+            # XLS 파일 저장
+            download.save_as(full_path_xls)
+            print(f"[ScraperStrategy] Download saved: {full_path_xls}")
+            
+            # XLS → XLSX 변환
+            return self._convert_xls_to_xlsx_safe(full_path_xls, save_path_dir, timestamp)
+            
+        except Exception as e:
+            return Failure(f"Download save failed: {str(e)}")
     
     def _convert_xls_to_xlsx(
         self,
@@ -105,7 +134,9 @@ class ScraperStrategy(ABC):
         timestamp: int
     ) -> str:
         """
-        XLS 파일을 XLSX로 변환
+        XLS 파일을 XLSX로 변환 (기존 인터페이스)
+        
+        하위 호환성을 위해 유지. 내부적으로 _convert_xls_to_xlsx_safe 사용
         
         Args:
             xls_path: XLS 파일 경로
@@ -114,6 +145,28 @@ class ScraperStrategy(ABC):
             
         Returns:
             XLSX 파일 경로 (실패 시 원본 XLS 경로)
+        """
+        result = self._convert_xls_to_xlsx_safe(xls_path, save_dir, timestamp)
+        return result.value_or(xls_path)
+    
+    def _convert_xls_to_xlsx_safe(
+        self,
+        xls_path: str,
+        save_dir: str,
+        timestamp: int
+    ) -> Result[str, str]:
+        """
+        XLS 파일을 XLSX로 변환 (Result 타입)
+        
+        Args:
+            xls_path: XLS 파일 경로
+            save_dir: 저장 디렉토리
+            timestamp: 타임스탬프
+            
+        Returns:
+            Result[str, str]
+            - Success: XLSX 파일 경로
+            - Failure: 에러 메시지
         """
         try:
             print("[ScraperStrategy] Converting XLS to XLSX...")
@@ -128,11 +181,12 @@ class ScraperStrategy(ABC):
             # 원본 XLS 삭제
             os.remove(xls_path)
             
-            return full_path_xlsx
+            return Success(full_path_xlsx)
             
         except Exception as e:
-            print(f"[ScraperStrategy] Conversion failed: {e}")
-            return xls_path
+            error_msg = f"Conversion failed: {str(e)}"
+            print(f"[ScraperStrategy] {error_msg}")
+            return Failure(error_msg)
     
     def _open_item_search_popup(self, page: Page) -> Page:
         """
