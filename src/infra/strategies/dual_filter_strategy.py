@@ -213,14 +213,9 @@ class DualFilterStrategy(ScraperStrategy):
         report_df.to_excel(report_path, index=False)
         print(f"[DualFilterStrategy] Saved report: {report_path}")
         
-        # Cleanup temp files
-        print("[DualFilterStrategy] Cleaning up temporary files...")
-        for file, _ in downloaded_files:
-            try:
-                os.remove(file)
-                print(f"  - Removed: {os.path.basename(file)}")
-            except Exception as e:
-                print(f"  - Failed to remove {os.path.basename(file)}: {e}")
+        print(f"[DualFilterStrategy] Downloaded files preserved in {save_path_dir}:")
+        for file, region in downloaded_files:
+            print(f"  - {os.path.basename(file)} ({region})")
         
         return report_path
     
