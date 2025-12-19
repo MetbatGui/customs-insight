@@ -12,14 +12,11 @@ class DualFilterStrategy(ScraperStrategy):
         """
         print("[DualFilterStrategy] Strategy Config:", strategy_config)
         
-        # 1. Config Extraction
-        hs_code = "8504230000"
-        target_text = ""
-        strategy_name = strategy_config.get('name', 'std')
-        
-        if strategy_config and 'search' in strategy_config:
-            hs_code = strategy_config['search'].get('hs_code', hs_code)
-            target_text = strategy_config['search'].get('target_text', "")
+        # 1. Config Extraction (공통 메서드 사용)
+        config = self._parse_config(strategy_config)
+        hs_code = config['hs_code']
+        target_text = config.get('target_text', "")
+        strategy_name = config['strategy_name'] or strategy_config.get('name', 'std')
 
         filter1 = strategy_config.get('filter1', {})
         filter_type = filter1.get('type') # e.g., "sido"
@@ -29,11 +26,10 @@ class DualFilterStrategy(ScraperStrategy):
             print("[DualFilterStrategy] No filter data found. Aborting.")
             return ""
 
-        # 2. Navigation
+        # 2. Navigation (공통 메서드 사용)
         url = "https://www.bandtrass.or.kr/customs/total.do?command=CUS001View&viewCode=CUS00301"
         print(f"[DualFilterStrategy] Navigating to {url}")
-        page.goto(url)
-        page.wait_for_load_state('networkidle')
+        self._navigate_to_url(page, url)
 
         # 3. Setup Basic Search Conditions
         # Select "Import/Export Results by Item" (CUS00301 pattern)
@@ -62,13 +58,8 @@ class DualFilterStrategy(ScraperStrategy):
             
             # Popup Logic (Adapted from SingleFilterStrategy)
             try:
-                # 1. Open Popup
-                page.wait_for_selector("#POPUP1", state="visible", timeout=5000)
-                with page.expect_popup() as popup_info:
-                    page.click("#POPUP1")
-                
-                popup = popup_info.value
-                popup.wait_for_load_state()
+                # 1. Open Popup (공통 메서드 사용)
+                popup = self._open_item_search_popup(page)
 
                 # 2. Input Code into #CustomText
                 popup.wait_for_selector("#CustomText")
@@ -88,13 +79,8 @@ class DualFilterStrategy(ScraperStrategy):
                     # Fallback ID click
                     popup.click("#CustomCheck")
 
-                # 4. Apply Selection (선택적용)
-                try:
-                    with popup.expect_event("close"):
-                        popup.get_by_text("선택적용", exact=True).click()
-                except:
-                    if not popup.is_closed():
-                         popup.get_by_text("선택적용", exact=True).click()
+                # 4. Apply Selection (공통 메서드 사용)
+                self._apply_popup_selection(popup)
                 
                 print("[DualFilterStrategy] HS Code applied via popup (Direct Input Mode).")
 
