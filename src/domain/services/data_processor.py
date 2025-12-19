@@ -20,26 +20,46 @@ class DataProcessor:
             >>> print(result_df.columns)
             ['date', 'export_amount', 'export_mom', 'export_yoy']
         """
-        from ..calculations.pipeline import process_trade_data
+        from domain.calculations.pipeline import process_trade_data
         
         # 기존 순수 함수 파이프라인 사용 (Phase 3에서 작성됨)
         return process_trade_data(df)
 
     def filter_by_year(self, df: pd.DataFrame, start_year: int, end_year: int) -> pd.DataFrame:
-        """Filter DataFrame by year range (inclusive)."""
-        # Convert date column to datetime for easier extracting
-        # Note: 'date' col is string "YYYY-MM"
+        """연도 범위로 월별 DataFrame을 필터링합니다.
+        
+        Args:
+            df: 필터링할 DataFrame (date, export_amount 등 포함)
+            start_year: 시작 연도 (포함)
+            end_year: 종료 연도 (포함)
+            
+        Returns:
+            필터링된 DataFrame
+            
+        Examples:
+            >>> processor = DataProcessor()
+            >>> filtered = processor.filter_by_year(df, 2024, 2025)
+        """
+        # date 컬럼은 "YYYY-MM" 형식의 문자열
         temp_date = pd.to_datetime(df['date'] + '-01')
-        
-        # Create mask
         mask = (temp_date.dt.year >= start_year) & (temp_date.dt.year <= end_year)
-        
         return df.loc[mask].reset_index(drop=True)
 
     def process_quarterly(self, monthly_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Aggregates monthly data into quarterly data and calculates QoQ and YoY.
-        Expects monthly_df to have 'date' (YYYY-MM) and 'export_amount' columns.
+        """월별 데이터를 분기별로 집계하고 QoQ/YoY를 계산합니다.
+        
+        Args:
+            monthly_df: 월별 DataFrame (date, export_amount 컬럼 필요)
+                       date는 'YYYY-MM' 형식의 문자열
+            
+        Returns:
+            분기별 DataFrame (quarter, export_amount, export_qoq, export_yoy)
+            
+        Examples:
+            >>> processor = DataProcessor()
+            >>> quarterly = processor.process_quarterly(monthly_df)
+            >>> print(quarterly.columns)
+            ['quarter', 'export_amount', 'export_qoq', 'export_yoy']
         """
         if monthly_df.empty:
             return pd.DataFrame(columns=['quarter', 'export_amount', 'export_qoq', 'export_yoy'])
@@ -93,14 +113,24 @@ class DataProcessor:
         return quarterly_df
 
     def filter_quarterly_by_year(self, df: pd.DataFrame, start_year: int, end_year: int) -> pd.DataFrame:
-        """Filter Quarterly DataFrame by year range (inclusive)."""
-        # Quarter is string like '2023Q1'
-        # Extract year
+        """연도 범위로 분기별 DataFrame을 필터링합니다.
+        
+        Args:
+            df: 필터링할 DataFrame (quarter 컬럼 필요)
+            start_year: 시작 연도 (포함)
+            end_year: 종료 연도 (포함)
+            
+        Returns:
+            필터링된 분기별 DataFrame
+            
+        Examples:
+            >>> processor = DataProcessor()
+            >>> filtered = processor.filter_quarterly_by_year(quarterly_df, 2024, 2025)
+        """
+        # quarter는 '2023Q1' 형식의 문자열
         df_copy = df.copy()
         df_copy['temp_year'] = df_copy['quarter'].astype(str).str[:4].astype(int)
-        
         mask = (df_copy['temp_year'] >= start_year) & (df_copy['temp_year'] <= end_year)
-        
         return df_copy.loc[mask].drop(columns=['temp_year']).reset_index(drop=True)
 
 
