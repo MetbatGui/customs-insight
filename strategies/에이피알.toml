@@ -12,7 +12,7 @@ values = ["서울 송파구"]
 
 [[corp.items]]
 name = "미용기기"
-hs_code = "8543702010"
+hs_code = "8543702020"
 
 [[corp.items.filters]]
 category = "국내지역"

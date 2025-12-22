@@ -7,6 +7,7 @@ import tomllib
 from infra.adapters.excel_reader_adapter import ExcelReaderAdapter
 from infra.adapters.bandtrass_scraper_adapter import BandtrassScraperAdapter
 from domain.services.data_processor import DataProcessor
+from domain.models import Strategy
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -84,23 +85,27 @@ def _download_data(output_dir: str, headless: bool = True, strategy_name: str = 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         
-    strategy_config = None
+    strategy = None
     if strategy_name:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        strategy_file = os.path.join(project_root, "strategies", f"{strategy_name}.toml")
-        if os.path.exists(strategy_file):
-            typer.echo(f"[Strategy] Loading strategy from: {strategy_file}")
-            with open(strategy_file, "rb") as f:
-                strategy_config = tomllib.load(f)
-            typer.echo(f"[Strategy] Loaded configuration for: {strategy_config.get('name', 'Unknown')}")
-        else:
-            typer.secho(f"[Error] Strategy file not found: {strategy_file}", fg=typer.colors.RED)
+        strategy_path = os.path.join(project_root, "strategies", f"{strategy_name}.toml")
+        if not os.path.exists(strategy_path):
+            typer.secho(f"[Error] Strategy file not found: {strategy_path}", fg=typer.colors.RED)
             raise typer.Exit(code=1)
+        
+        # TOML 파일 로드 및 Strategy 객체 생성
+        typer.echo(f"Loading strategy from: {strategy_path}")
+        with open(strategy_path, "rb") as f:
+            toml_dict = tomllib.load(f)
+        strategy = Strategy.from_toml_dict(toml_dict)
+    else:
+        typer.secho(f"[Error] Strategy name is required", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
 
     typer.echo(f"Starting download to {output_dir}...")
     scraper = BandtrassScraperAdapter(headless=headless)
     try:
-        file_path = scraper.download_data(output_dir, strategy=strategy_config)
+        file_path = scraper.download_data(output_dir, strategy=strategy)
         typer.echo(f"Download completed: {file_path}")
         return file_path
     except Exception as e:

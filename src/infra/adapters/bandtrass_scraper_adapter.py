@@ -19,13 +19,13 @@ class BandtrassScraperAdapter(ScraperPort):
         self.user_id = "zeya9643"
         self.user_pw = "chlwltjr43!"
 
-    def download_data(self, save_path: str, strategy_path: str = None) -> list[str]:
+    def download_data(self, save_path: str, strategy: Strategy) -> list[str]:
         """
         데이터 다운로드
         
         Args:
             save_path: 저장 디렉토리
-            strategy_path: Strategy TOML 파일 경로
+            strategy: Strategy 객체
             
         Returns:
             다운로드된 파일 경로 리스트
@@ -43,14 +43,7 @@ class BandtrassScraperAdapter(ScraperPort):
                 # 1. Login
                 self._login(page)
                 
-                # 2. Load Strategy
-                if strategy_path:
-                    print(f"[BandtrassAdapter] Loading strategy from: {strategy_path}")
-                    strategy = Strategy.from_toml_file(strategy_path)
-                else:
-                    raise ValueError("strategy_path is required")
-                
-                # 3. Execute Strategy using StrategyExecutor
+                # 2. Execute Strategy using StrategyExecutor
                 print(f"[BandtrassAdapter] Executing strategy: {strategy.name}")
                 executor = StrategyExecutor()
                 results = executor.execute(page, save_path, strategy)
