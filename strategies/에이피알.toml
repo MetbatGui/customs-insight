@@ -1,0 +1,20 @@
+[corp]
+name = "에이피알"
+
+[[corp.items]]
+name = "화장품"
+hs_code = "3304991000"
+
+[[corp.items.filters]]
+category = "국내지역"
+scope = "시군구"
+values = ["서울 송파구"]
+
+[[corp.items]]
+name = "미용기기"
+hs_code = "8543702010"
+
+[[corp.items.filters]]
+category = "국내지역"
+scope = "시군구"
+values = ["서울 송파구"]

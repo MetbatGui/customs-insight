@@ -1,0 +1,11 @@
+[corp]
+name = "한화에어로스페이스"
+
+[[corp.items]]
+name = "자주식"
+hs_code = "9301101000"
+
+[[corp.items.filters]]
+category = "국내지역"
+scope = "시군구"
+values = ["경남 창원시"]

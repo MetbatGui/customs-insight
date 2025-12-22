@@ -1,9 +1,10 @@
+[corp]
 name = "HD현대일렉트릭"
 
-[search]
+[[corp.items]]
+name = "용량이 10,000킬로볼트암페어를 초과하는 것"
 hs_code = "8504230000"
-target_text = "[8504230000] 용량이 10,000킬로볼트암페어를 초과하는 것"
 
-[filter1]
-type = "custom"
-data = ["울산세관"]
+[[corp.items.filters]]
+category = "세관"
+values = ["울산세관"]

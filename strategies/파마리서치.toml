@@ -1,5 +1,6 @@
+[corp]
 name = "파마리서치"
 
-[search]
+[[corp.items]]
+name = "화장품"
 hs_code = "3304999000"
-target_text = "[3304999000] 기타"

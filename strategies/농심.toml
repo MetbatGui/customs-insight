@@ -1,9 +1,11 @@
+[corp]
 name = "농심"
 
-[search]
+[[corp.items]]
+name = "라면"
 hs_code = "1902301010"
-target_text = "[1902301010] 라면"
 
-[filter1]
-type = "sido"
-data = ["부산"]
+[[corp.items.filters]]
+category = "국내지역"
+scope = "시"
+values = ["부산"]

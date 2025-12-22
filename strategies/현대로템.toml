@@ -1,0 +1,11 @@
+[corp]
+name = "현대로템"
+
+[[corp.items]]
+name = "전차 및 장갑차량"
+hs_code = "8710001000"
+
+[[corp.items.filters]]
+category = "국내지역"
+scope = "시군구"
+values = ["경남 창원시"]
