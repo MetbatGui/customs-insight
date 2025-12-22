@@ -94,7 +94,7 @@ class TestStrategyExecutor(unittest.TestCase):
         self.assertIn("[12]", output)  # 다운로드
         self.assertIn("[13]", output)  # 얼럿
         
-        print("\n" + output)  # 테스트 실행 시 출력 확인용
+        # print("\n" + output)  # Windows console handle error 방지
     
     def test_execute_nongshim_strategy(self):
         """농심 전략 실행 테스트 (1개 품목, 국내지역 필터)"""
