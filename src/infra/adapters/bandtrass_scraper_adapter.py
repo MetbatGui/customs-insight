@@ -1,18 +1,35 @@
 import time
 import os
 from playwright.sync_api import sync_playwright, Page
-from domain.ports.scraper_port import ScraperPort
-from infra.strategies.dual_filter_strategy import DualFilterStrategy
-from infra.strategies.single_filter_strategy import SingleFilterStrategy
+from src.domain.ports.scraper_port import ScraperPort
+from src.domain.models import Strategy
+from src.infra.services.strategy_executor import StrategyExecutor
+
 
 class BandtrassScraperAdapter(ScraperPort):
+    """
+    Bandtrass 스크래퍼 어댑터
+    
+    Strategy TOML 파일을 로드하여 StrategyExecutor로 실행합니다.
+    """
+    
     def __init__(self, headless: bool = True):
         self.headless = headless
         # Credentials could be injected via config/env vars in real app
         self.user_id = "zeya9643"
         self.user_pw = "chlwltjr43!"
 
-    def download_data(self, save_path: str, strategy: dict = None) -> str:
+    def download_data(self, save_path: str, strategy_path: str = None) -> list[str]:
+        """
+        데이터 다운로드
+        
+        Args:
+            save_path: 저장 디렉토리
+            strategy_path: Strategy TOML 파일 경로
+            
+        Returns:
+            다운로드된 파일 경로 리스트
+        """
         with sync_playwright() as p:
             print("[BandtrassAdapter] Launching browser...")
             browser = p.chromium.launch(headless=self.headless)
@@ -26,19 +43,19 @@ class BandtrassScraperAdapter(ScraperPort):
                 # 1. Login
                 self._login(page)
                 
-                # 2. Select Strategy and Execute
-                # Currently defaulting to SingleFilterStrategy.
-                # In the future, logic can check strategy config to choose MultiFilterStrategy.
-                if strategy and 'filter1' in strategy:
-                    print("[BandtrassAdapter] Executing DualFilterStrategy...")
-                    scraper_strategy = DualFilterStrategy()
+                # 2. Load Strategy
+                if strategy_path:
+                    print(f"[BandtrassAdapter] Loading strategy from: {strategy_path}")
+                    strategy = Strategy.from_toml_file(strategy_path)
                 else:
-                    print("[BandtrassAdapter] Executing SingleFilterStrategy...")
-                    scraper_strategy = SingleFilterStrategy()
+                    raise ValueError("strategy_path is required")
                 
-                final_path = scraper_strategy.execute(page, save_path, strategy)
+                # 3. Execute Strategy using StrategyExecutor
+                print(f"[BandtrassAdapter] Executing strategy: {strategy.name}")
+                executor = StrategyExecutor()
+                results = executor.execute(page, save_path, strategy)
                 
-                return final_path
+                return results
             finally:
                 context.close()
                 browser.close()
