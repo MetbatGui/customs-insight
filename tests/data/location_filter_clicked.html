@@ -1,0 +1,32 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>국내지역 필터 선택 후 - LOCATION_TYPE 드롭다운</title>
+</head>
+
+<body>
+    <tr style="height: 60px;" id="tr2">
+        <th id="selectLabel2">항목2</th>
+        <td class="tl">
+            <!-- 시/시군구 선택 드롭다운 표시 -->
+            <div class="pivot_selectBox" id="temp_select2" style="float: left;">
+                <span style="font-size:13px;">선택하세요.</span>
+                <select id="LOCATION_TYPE" name="LOCATION_TYPE">
+                    <option value="">선택하세요.</option>
+                    <option value="A">시 선택</option>
+                    <option value="B">시군구 선택</option>
+                </select>
+            </div>
+
+            <div id="FILTER2_DIV">
+                <div id="FILTER2_SELECT_CODE" style="display: none;"></div>
+                <div id="FILTER2_POPUP_CODE" style="display: none;"></div>
+                <p id="FILTER2_KOR" style="display: inline-block;"></p>
+                <p id="FILTER2_CODE" style="display: none;"></p>
+            </div>
+        </td>
+    </tr>
+</body>
+
+</html>

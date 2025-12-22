@@ -1,0 +1,48 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>시군구 선택 후 - 지역 multiselect 드롭다운</title>
+</head>
+
+<body>
+    <tr style="height: 60px;" id="tr2">
+        <th id="selectLabel2">시군구 선택</th>
+        <td class="tl">
+            <!-- 시군구 선택됨 -->
+            <div class="pivot_selectBox" id="temp_select2" style="float: left;">
+                <span style="font-size:13px;">시군구 선택</span>
+                <select id="LOCATION_TYPE" name="LOCATION_TYPE">
+                    <option value="">선택하세요.</option>
+                    <option value="A">시 선택</option>
+                    <option value="B">시군구 선택</option>
+                </select>
+            </div>
+
+            <div id="FILTER2_DIV">
+                <!-- multiselect 드롭다운 표시 -->
+                <div id="FILTER2_SELECT_CODE">
+                    <select id="Select2" name="Select2" multiple="multiple">
+                        <optgroup label="서울">
+                            <option value="2">서울 강동구</option>
+                            <option value="16">서울 송파구</option>
+                            <option value="26">서울 강남구</option>
+                        </optgroup>
+                        <optgroup label="부산">
+                            <option value="28">부산 남구</option>
+                            <option value="41">부산 해운대구</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <!-- 선택된 지역 표시 -->
+                <p id="FILTER2_KOR" style="display: inline-block;">서울 송파구</p>
+                <p id="FILTER2_CODE" style="display: none;">16</p>
+
+                <button id="Select2RemoveAll" type="button">선택초기화</button>
+            </div>
+        </td>
+    </tr>
+</body>
+
+</html>

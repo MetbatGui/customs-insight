@@ -1,0 +1,36 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>품목 드롭다운에서 '품목' 선택 후</title>
+</head>
+
+<body>
+    <tr style="height: 60px;" id="tr1">
+        <th id="selectLabel1">품목</th>
+        <td class="tl">
+            <!-- 품목 선택됨 -->
+            <div class="pivot_selectBox" id="temp_select1" style="float: left;">
+                <span style="font-size:13px;">품목</span>
+                <select id="GODS_TYPE" name="GODS_TYPE">
+                    <option value="">선택하세요.</option>
+                    <option value="H">품목</option>
+                    <option value="S">성질별</option>
+                    <option value="N">신성질별</option>
+                </select>
+            </div>
+
+            <div id="FILTER1_DIV">
+                <!-- 품목 검색하기 버튼 표시 -->
+                <div id="FILTER1_POPUP_CODE" style="padding: 3px 12px;">
+                    <i class="fa fa-keyboard-o"></i>
+                    <span id="POPUP1">품목 검색하기</span>
+                </div>
+                <p id="FILTER1_KOR" style="display: none;"></p>
+                <p id="FILTER1_CODE" style="display: inline-block;"></p>
+            </div>
+        </td>
+    </tr>
+</body>
+
+</html>

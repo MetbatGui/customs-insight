@@ -1,0 +1,81 @@
+<html data-jetski-tab-id="1064703511"><head><meta http-equiv="origin-trial" content="A7vZI3v+Gz7JfuRolKNM4Aff6zaGuT7X0mf3wtoZTnKv6497cVMnhy03KDqX7kBz/q/iidW7srW31oQbBt4VhgoAAACUeyJvcmlnaW4iOiJodHRwczovL3d3dy5nb29nbGUuY29tOjQ0MyIsImZlYXR1cmUiOiJEaXNhYmxlVGhpcmRQYXJ0eVN0b3JhZ2VQYXJ0aXRpb25pbmczIiwiZXhwaXJ5IjoxNzU3OTgwODAwLCJpc1N1YmRvbWFpbiI6dHJ1ZSwiaXNUaGlyZFBhcnR5Ijp0cnVlfQ==">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>[수출입통계] 상세조회</title>
+</head>
+<body>
+<div id="wrapper">
+	<div id="page-wrapper" class="white-bg">
+		<div class="row">
+			<form id="form" name="form" action="/customs/total.do" method="post">
+				<input type="hidden" name="command" id="command" value="CUS00301Detail">
+				
+				<div class="contentBody m-t-md"> 
+					<div class="contentArea">
+						<div class="tableStyle01" id="search_div">
+							<table>
+								<tbody>
+									<tr>
+										<th class="borL0 bg pe_qF pe_qa" scope="row">선택항목</th>
+										<td class="tl">
+											<div class="btn btn-pivot" id="GODS_DIV">품목/성질별/신성질별</div>
+											<div class="btn btn-pivot" id="NATN_DIV">국가</div>
+											<div class="btn btn-pivot" id="ECONO_DIV">대륙/경제권</div>
+											<div class="btn btn-pivot" id="PORT_DIV">공항/항구</div>
+											<div class="btn btn-pivot" id="LOCATION_DIV">국내지역</div>
+											<div class="btn btn-pivot" id="CSTM_DIV">세관</div>
+											<div class="btn btn-pivot" id="STL_DIV">결제방법</div>
+											<div class="btn btn-pivot" id="TRSC_DIV">거래구분</div>
+											<div class="btn btn-pivot" id="DLNG_DIV">거래종류</div>
+										</td>
+									</tr>
+									
+									<tr style="height: 60px;" id="tr1" name="tr1">
+										<th class="borL0 bg pe_qF pe_qa" scope="row" id="selectLabel1">항목1</th>
+										<td class="tl">
+											<div id="FILTER1_DIV">
+												<div class="m-r-md" id="FILTER1_SELECT_CODE" style="display: none;">
+													<select id="Select1" name="Select1" multiple="multiple"></select>
+												</div>
+												<div class="btn btn-default_pivot m-r-md" id="FILTER1_POPUP_CODE" style="display: none;">
+													<i class="fa fa-keyboard-o"></i>
+													<span class="font13" id="POPUP1" name="POPUP1"></span>
+												</div>
+												<p style="display: none;" id="FILTER1_KOR"></p>
+												<p style="display: inline-block;" id="FILTER1_CODE"></p>
+											</div>
+										</td>
+									</tr>
+									
+									<tr style="height: 60px;" id="tr2" name="tr2">
+										<th class="borL0 bg pe_qF pe_qa" scope="row" id="selectLabel2">항목2</th>
+										<td class="tl">
+											<div id="FILTER2_DIV">
+												<div class="m-r-md" id="FILTER2_SELECT_CODE" style="display: none;">
+													<select id="Select2" name="Select2" multiple="multiple"></select>
+												</div>
+												<div class="btn btn-default_pivot m-r-md" id="FILTER2_POPUP_CODE" style="display: none;">
+													<i class="fa fa-keyboard-o"></i>
+													<span class="font13" id="POPUP2" name="POPUP2"></span>
+												</div>
+												<p style="display: none;" id="FILTER2_KOR"></p>
+												<p style="display: inline-block;" id="FILTER2_CODE"></p>
+											</div>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+						
+						<div class="text-center m-t-sm">
+							<button class="btn btn-ok btn-lg" onclick="javascript:goSearch(); return false;">
+								<i class="fa fa-check"></i> 조회하기
+							</button>
+						</div>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
+</body>
+</html>

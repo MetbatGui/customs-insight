@@ -1,0 +1,33 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>품목 필터 선택 후 - GODS_TYPE 드롭다운</title>
+</head>
+
+<body>
+    <tr style="height: 60px;" id="tr1">
+        <th id="selectLabel1">항목1</th>
+        <td class="tl">
+            <!-- 품목/성질별/신성질별 드롭다운 표시 -->
+            <div class="pivot_selectBox" id="temp_select1" style="float: left;">
+                <span style="font-size:13px;">선택하세요.</span>
+                <select id="GODS_TYPE" name="GODS_TYPE">
+                    <option value="">선택하세요.</option>
+                    <option value="H">품목</option>
+                    <option value="S">성질별</option>
+                    <option value="N">신성질별</option>
+                </select>
+            </div>
+
+            <div id="FILTER1_DIV">
+                <div id="FILTER1_SELECT_CODE" style="display: none;"></div>
+                <div id="FILTER1_POPUP_CODE" style="display: none;"></div>
+                <p id="FILTER1_KOR" style="display: none;"></p>
+                <p id="FILTER1_CODE" style="display: inline-block;"></p>
+            </div>
+        </td>
+    </tr>
+</body>
+
+</html>

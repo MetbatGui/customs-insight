@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>품목분류 - HS Code 팝업</title>
+</head>
+
+<body>
+    <h1>품목분류</h1>
+
+    <p style="text-align: right;">검색결과 중 해당 품목명을 클릭하시면 자동 입력됩니다.</p>
+
+    <p style="text-align: right;">
+        <button type="button" onclick="fn_ok();" style="width: 80px;">선택적용</button>
+    </p>
+
+    <p style="text-align: left;">
+        HS단위를 선택하세요.
+        <select id="UNIT" name="UNIT">
+            <option value="2">2단위</option>
+            <option value="4">4단위</option>
+            <option value="6">6단위</option>
+            <option value="10" selected="selected">10단위</option>
+        </select>
+
+        <input type="text" style="width: 100px;" id="CustomText" name="CustomText">
+        <button type="button" id="CustomCheck" name="CustomCheck" onclick="CustomAdd();"
+            style="width: 100px;">직접입력추가</button>
+    </p>
+
+    <div>
+        <table id="tb_list1">
+            <thead>
+                <tr>
+                    <th colspan="2">HS CODE 2 자리</th>
+                </tr>
+                <tr>
+                    <th>CODE</th>
+                    <th>품목명</th>
+                </tr>
+            </thead>
+            <tbody id="tbody_1">
+                <tr>
+                    <td>19</td>
+                    <td>곡물,곡분의 주제품과 빵류</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table id="tb_list10">
+            <thead>
+                <tr>
+                    <th colspan="2">HS CODE 10 자리</th>
+                </tr>
+                <tr>
+                    <th>CODE</th>
+                    <th>품목명</th>
+                </tr>
+            </thead>
+            <tbody id="tbody_10">
+                <tr>
+                    <td colspan="2">좌측 품목을 선택해주세요.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table>
+            <thead>
+                <tr>
+                    <th colspan="2">선택한 HSCODE</th>
+                </tr>
+                <tr>
+                    <th>CODE</th>
+                    <th>품목명</th>
+                </tr>
+            </thead>
+            <tbody id="tbody_Select">
+                <tr>
+                    <td colspan="2"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+
+</html>
