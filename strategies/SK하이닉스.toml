@@ -1,0 +1,11 @@
+[corp]
+name = "SK하이닉스"
+
+[[corp.items]]
+name = "디램"
+hs_code = "8542321010"
+
+[[corp.items.filters]]
+category = "국내지역"
+scope = "시군구"
+values = ["경기 이천시"]

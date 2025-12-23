@@ -55,32 +55,74 @@ class StrategyExecutor:
             print(f"\n--- Item {idx}/{len(strategy.items)}: {item.name} ---")
             print(f"  HS Code: {item.hs_code}")
             print(f"  Filters: {len(item.filters)} filter(s)")
-            for f_idx, f in enumerate(item.filters, 1):
-                print(f"    Filter {f_idx}: {f.category} - {f}")
             
-            # 각 품목마다 페이지를 새로 로드하여 깨끗한 상태에서 시작
-            url = "https://www.bandtrass.or.kr/customs/total.do?command=CUS001View&viewCode=CUS00301"
-            print(f"  [Navigation] Loading fresh page...")
-            page.goto(url)
-            page.wait_for_load_state('networkidle')
-            page.wait_for_timeout(1000)
+            # 지역 필터를 분리하여 각 지역마다 개별 다운로드
+            # isinstance가 모듈 경로 차이로 False가 될 수 있으므로 타입 이름으로 체크
+            region_filters = [f for f in item.filters if type(f).__name__ == 'DomesticRegionFilter']
+            other_filters = [f for f in item.filters if type(f).__name__ != 'DomesticRegionFilter']
             
-            # 1-6: 품목 검색
-            self._search_item(page, item)
+            print(f"  → Region filters found: {len(region_filters)}")
+            if region_filters:
+                print(f"  → Regions in filter: {region_filters[0].regions}")
             
-            # 7-10: 필터 적용 및 조회
-            if item.filters:
-                print(f"  [Note] Applying {len(item.filters)} filter(s)")
-                self._apply_filters(page, item.filters)
+            # 지역 필터가 있고 여러 지역이 있는 경우, 각 지역마다 개별 다운로드
+            if region_filters and len(region_filters[0].regions) > 1:
+                region_filter = region_filters[0]
+                print(f"  → Multiple regions detected: {region_filter.regions}")
+                print(f"  → Will download separately for each region")
+                
+                for region_idx, region in enumerate(region_filter.regions, 1):
+                    print(f"\n  === Region {region_idx}/{len(region_filter.regions)}: {region} ===")
+                    
+                    # 페이지 새로 로드
+                    url = "https://www.bandtrass.or.kr/customs/total.do?command=CUS001View&viewCode=CUS00301"
+                    print(f"  [Navigation] Loading fresh page...")
+                    page.goto(url)
+                    page.wait_for_load_state('networkidle')
+                    page.wait_for_timeout(1000)
+                    
+                    # 1-6: 품목 검색
+                    self._search_item(page, item)
+                    
+                    # 7-10: 이 지역에 대한 필터만 적용
+                    single_region_filter = DomesticRegionFilter(
+                        scope=region_filter.scope,
+                        regions=[region]
+                    )
+                    
+                    print(f"  → Created filter with single region: {single_region_filter.regions}")
+                    
+                    # 다른 필터들도 함께 적용
+                    filters_to_apply = [single_region_filter] + other_filters
+                    self._apply_filters(page, filters_to_apply)
+                    
+                    # 11-13: 데이터 다운로드 (파일명에 지역 포함)
+                    file_path = self._download_data(page, save_dir, strategy.name, f"{item.name}_{region}")
+                    results.append(file_path)
             else:
-                # 필터 없으면 바로 조회
-                print("  [Note] No filters to apply, proceeding to search")
-                page.locator('button[onclick*="goSearch"]').click()
-                page.wait_for_timeout(3000)
-            
-            # 11-13: 데이터 다운로드
-            file_path = self._download_data(page, save_dir, strategy.name, item.name)
-            results.append(file_path)
+                # 지역 필터가 없거나 단일 지역인 경우 기존 로직
+                url = "https://www.bandtrass.or.kr/customs/total.do?command=CUS001View&viewCode=CUS00301"
+                print(f"  [Navigation] Loading fresh page...")
+                page.goto(url)
+                page.wait_for_load_state('networkidle')
+                page.wait_for_timeout(1000)
+                
+                # 1-6: 품목 검색
+                self._search_item(page, item)
+                
+                # 7-10: 필터 적용 및 조회
+                if item.filters:
+                    print(f"  [Note] Applying {len(item.filters)} filter(s)")
+                    self._apply_filters(page, item.filters)
+                else:
+                    # 필터 없으면 바로 조회
+                    print("  [Note] No filters to apply, proceeding to search")
+                    page.locator('button[onclick*="goSearch"]').click()
+                    page.wait_for_timeout(3000)
+                
+                # 11-13: 데이터 다운로드
+                file_path = self._download_data(page, save_dir, strategy.name, item.name)
+                results.append(file_path)
         
         print(f"\n{'='*60}")
         print(f"[StrategyExecutor] Completed: {len(results)} files downloaded")
@@ -269,13 +311,51 @@ class StrategyExecutor:
             page: Playwright Page 객체
             filter: CustomsOfficeFilter 객체
         """
-        # TODO: 세관 필터 구현 필요
+        # [7] 세관 필터 선택
         print(f"  [7] Selecting '세관' filter")
-        print(f"  [8-9] Customs office filter: {filter.customs_offices}")
-        print(f"  [10] Clicking '조회하기'")
+        page.locator('div#CSTM_DIV').click()
+        # 세관 필터 UI가 렌더링될 때까지 대기
+        page.wait_for_timeout(1500)
         
-        # 임시로 조회하기만 클릭
+        # [8-9] 세관 선택 - Bootstrap multiselect 처리 (국내지역과 동일한 FILTER2_SELECT_CODE 사용)
+        for customs_office in filter.customs_offices:
+            print(f"  [8-9] Selecting customs office: '{customs_office}'")
+            
+            # multiselect 드롭다운 열기 - FILTER2_SELECT_CODE 내의 multiselect 버튼
+            multiselect_button = page.locator('#FILTER2_SELECT_CODE button.multiselect').first
+            multiselect_button.click()
+            page.wait_for_timeout(500)
+            
+            # 검색창에 세관명 입력하여 필터링
+            search_input = page.locator('input.multiselect-search').last
+            search_input.fill(customs_office)
+            page.wait_for_timeout(500)
+            
+            # 해당 세관의 체크박스 찾기
+            # 표시된 항목 중에서만 선택 (multiselect-filter-hidden이 아닌 것)
+            checkbox_label = page.locator(f'li:not(.multiselect-filter-hidden) label.checkbox:has-text("{customs_office}")').first
+            
+            # 체크박스가 이미 체크되어 있는지 확인
+            checkbox_input = checkbox_label.locator('input[type="checkbox"]')
+            is_checked = checkbox_input.is_checked()
+            
+            if is_checked:
+                print(f"  → Already selected: {customs_office}")
+            else:
+                checkbox_label.click()
+                page.wait_for_timeout(500)
+                print(f"  → Selected: {customs_office}")
+            
+            # 드롭다운 닫기 - 버튼을 다시 클릭해서 토글
+            print(f"  → Closing dropdown...")
+            multiselect_button.click()
+            page.wait_for_timeout(500)
+        
+        # [10] 조회하기 버튼 클릭
+        print(f"  [10] Clicking '조회하기'")
         page.locator('button[onclick*="goSearch"]').click()
+        
+        # 결과 테이블 로드 대기
         page.wait_for_selector('#table_list_1 tr.jqgrow', timeout=10000)
         page.wait_for_timeout(2000)
     
@@ -292,27 +372,112 @@ class StrategyExecutor:
         Returns:
             다운로드된 파일 경로
         """
-        # [11] 첫 번째 행의 수출 금액 셀 클릭
+        # [11] 첫 번째 행의 수출 금액 셀 클릭 - 팝업 열림
         print(f"  [11] Clicking first row's export amount cell")
         export_amt_cell = page.locator('td[aria-describedby="table_list_1_EX_AMT"] font').first
         export_amt_cell.wait_for()
-        export_amt_cell.click()
         
-        # 상세 페이지 로드 대기 (중요!)
-        print(f"  → Waiting for detail page to load...")
-        page.wait_for_timeout(10000)  # 10초 대기
+        # 팝업 이벤트 대기 시작
+        print(f"  → Waiting for popup to open...")
+        try:
+            with page.expect_popup(timeout=5000) as popup_info:
+                export_amt_cell.click()
+            popup = popup_info.value
+            popup.wait_for_load_state()
+            print(f"  → Popup opened successfully")
+        except Exception as e:
+            print(f"  → Popup event timeout: {e}")
+            # 이미 열린 팝업이 있는지 확인
+            contexts = page.context.pages
+            if len(contexts) > 1:
+                popup = contexts[-1]
+                print(f"  → Using existing popup")
+            else:
+                raise Exception("Failed to open detail popup")
         
-        # [12] 다운로드 버튼 클릭
-        print(f"  [12] Clicking download button")
-        download_btn = page.locator('a[href*="GridtoExcel"]')
+        # 팝업 로드 대기 (5초)
+        print(f"  → Waiting 5 seconds for popup to fully load...")
+        popup.wait_for_timeout(5000)
+        
+        # 5초 후 팝업 스크린샷 촬영
+        screenshot_dir = os.path.join(save_dir, "screenshots")
+        os.makedirs(screenshot_dir, exist_ok=True)
+        screenshot_path = os.path.join(screenshot_dir, f"{strategy_name}_{item_name}_popup.png")
+        popup.screenshot(path=screenshot_path)
+        print(f"  → Screenshot saved: {screenshot_path}")
+        
+        # [12] 팝업 내의 다운로드 버튼 클릭
+        print(f"  [12] Clicking download button in popup")
+        download_btn = popup.locator('a[href*="GridtoExcel"]')
         download_btn.wait_for(state='visible', timeout=10000)
+        print(f"  → Download button found!")
         
-        # 다운로드 시작 - 올바른 Playwright 패턴 사용
-        print(f"  → Starting download...")
-        with page.expect_download(timeout=30000) as download_info:
-            download_btn.click()
+        # 다운로드 이벤트 리스너 추가 (어디서 발생하는지 확인)
+        download_from_popup = []
+        download_from_page = []
         
-        download = download_info.value
+        def on_popup_download(download):
+            print(f"  → [EVENT] Download event detected from POPUP!")
+            download_from_popup.append(download)
+        
+        def on_page_download(download):
+            print(f"  → [EVENT] Download event detected from MAIN PAGE!")
+            download_from_page.append(download)
+        
+        popup.once('download', on_popup_download)
+        page.once('download', on_page_download)
+        
+        # Dialog 이벤트 리스너 추가 (confirm 대화상자 자동 수락)
+        dialog_count = [0]
+        def on_dialog(dialog):
+            dialog_count[0] += 1
+            msg = dialog.message
+            dialog_type = dialog.type
+            print(f"  → [DIALOG #{dialog_count[0]}] Type: {dialog_type}, Message: {msg[:50]}...")
+            try:
+                dialog.accept()  # 자동으로 수락
+                print(f"  → [DIALOG #{dialog_count[0]}] Accepted")
+            except Exception as e:
+                # 이미 처리된 dialog는 무시
+                print(f"  → [DIALOG #{dialog_count[0]}] Already handled")
+        
+        popup.on('dialog', on_dialog)
+        page.on('dialog', on_dialog)
+        
+        # 버튼 클릭
+        print(f"  → Clicking download button...")
+        download_btn.click()
+        
+        # confirm 대화상자가 나타나고 accept된 후 다운로드가 시작됨
+        # 최대 30초간 다운로드 이벤트를 폴링으로 확인
+        print(f"  → Waiting for download to start (max 30 seconds)...")
+        max_wait = 30  # 최대 30초
+        elapsed = 0
+        interval = 1  # 1초마다 체크
+        
+        while elapsed < max_wait:
+            if download_from_popup or download_from_page:
+                break
+            popup.wait_for_timeout(interval * 1000)
+            elapsed += interval
+            if elapsed % 5 == 0:  # 5초마다 진행 상황 출력
+                print(f"  → Still waiting... ({elapsed}s elapsed, {dialog_count[0]} dialogs)")
+        
+        # 결과 확인
+        print(f"  → Total dialogs: {dialog_count[0]}")
+        print(f"  → Downloads from popup: {len(download_from_popup)}")
+        print(f"  → Downloads from page: {len(download_from_page)}")
+        
+        # 다운로드 객체 가져오기
+        download = None
+        if download_from_popup:
+            download = download_from_popup[0]
+            print(f"  → Using download from popup")
+        elif download_from_page:
+            download = download_from_page[0]
+            print(f"  → Using download from main page")
+        else:
+            raise Exception(f"No download event triggered after {elapsed} seconds. Dialogs: {dialog_count[0]}")
         
         # [13] 얼럿 자동 수락 (이미 page.on('dialog') 설정됨)
         print(f"  [13] Download accepted")

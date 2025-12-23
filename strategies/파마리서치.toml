@@ -4,3 +4,8 @@ name = "파마리서치"
 [[corp.items]]
 name = "화장품"
 hs_code = "3304999000"
+
+[[corp.items.filters]]
+category = "국내지역"
+scope = "시군구"
+values = ["강원 강릉시"]

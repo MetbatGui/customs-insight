@@ -56,8 +56,10 @@ def _generate_report(input_file: str, start_year: int, end_year: int, output: st
         quarterly_df_all = processor.process_quarterly(monthly_df_all)
         
         # 4. Filter
-        monthly_df_filtered = processor.filter_by_year(monthly_df_all, start_year, end_year)
-        quarterly_df_filtered = processor.filter_quarterly_by_year(quarterly_df_all, start_year, end_year)
+        # MoM/YoY 계산을 위해 시작년도 -1년부터 저장
+        filter_start_year = start_year - 1
+        monthly_df_filtered = processor.filter_by_year(monthly_df_all, filter_start_year, end_year)
+        quarterly_df_filtered = processor.filter_quarterly_by_year(quarterly_df_all, filter_start_year, end_year)
         
         typer.echo(f"Exporting {len(monthly_df_filtered)} monthly records and {len(quarterly_df_filtered)} quarterly records.")
         
@@ -77,10 +79,83 @@ def _generate_report(input_file: str, start_year: int, end_year: int, output: st
         typer.secho(f"Error generating report: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-def _download_data(output_dir: str, headless: bool = True, strategy_name: str = None) -> str:
+def _merge_downloaded_files(file_paths: list[str], strategy_name: str, start_year: int, end_year: int) -> str:
+    """
+    여러 다운로드된 xlsx 파일을 하나의 report로 합침
+    
+    원본(raw) 데이터를 먼저 병합한 후 한 번에 process()를 호출하여
+    MoM/YoY가 전체 데이터에 대해 정확하게 계산되도록 합니다.
+    
+    Args:
+        file_paths: 다운로드된 xlsx 파일 경로 리스트
+        strategy_name: 전략 이름
+        start_year: 필터링 시작 연도
+        end_year: 필터링 종료 연도
+        
+    Returns:
+        통합된 report 파일 경로
+    """
+    typer.echo(f"\n=== Merging {len(file_paths)} downloaded files ===")
+    
+    try:
+        adapter = ExcelReaderAdapter()
+        processor = DataProcessor()
+        
+        all_raw_dfs = []
+        
+        # 1단계: 각 파일의 원본(raw) 데이터를 읽어서 리스트에 저장
+        typer.echo("Reading raw data from all files...")
+        for file_path in file_paths:
+            typer.echo(f"  - Reading: {file_path}")
+            raw_df = adapter.read(file_path)
+            all_raw_dfs.append(raw_df)
+        
+        # 2단계: 모든 원본 데이터를 먼저 합침
+        typer.echo("Merging all raw data...")
+        merged_raw = pd.concat(all_raw_dfs, ignore_index=True)
+        typer.echo(f"Total raw records: {len(merged_raw)}")
+        
+        # 3단계: 합친 원본 데이터를 한 번에 처리 (MoM/YoY 계산)
+        typer.echo("Processing merged data (calculating MoM/YoY)...")
+        merged_monthly = processor.process(merged_raw)
+        typer.echo(f"Processed monthly records: {len(merged_monthly)}")
+        
+        # 4단계: Quarterly 데이터 생성
+        typer.echo("Generating quarterly data...")
+        quarterly_df_all = processor.process_quarterly(merged_monthly)
+        
+        # 5단계: 연도별 필터링
+        # MoM/YoY 계산을 위해 시작년도 -1년부터 저장
+        # 예: 2024년 1월 MoM은 2023년 12월 데이터 필요, 2024년 YoY는 2023년 전체 데이터 필요
+        filter_start_year = start_year - 1
+        typer.echo(f"Filtering data ({filter_start_year}-{end_year}) for MoM/YoY calculation...")
+        monthly_df_filtered = processor.filter_by_year(merged_monthly, filter_start_year, end_year)
+        quarterly_df_filtered = processor.filter_quarterly_by_year(quarterly_df_all, filter_start_year, end_year)
+        
+        # 6단계: 통합 report 파일 저장
+        output = f"reports/report_{strategy_name}.xlsx"
+        output_dir = os.path.dirname(output)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            monthly_df_filtered.to_excel(writer, sheet_name='Monthly', index=False)
+            quarterly_df_filtered.to_excel(writer, sheet_name='Quarterly', index=False)
+            
+        typer.echo(f"\n✓ Successfully merged and saved report at {output}")
+        typer.echo(f"  - {len(monthly_df_filtered)} monthly records")
+        typer.echo(f"  - {len(quarterly_df_filtered)} quarterly records")
+        
+        return output
+        
+    except Exception as e:
+        typer.secho(f"Error merging files: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+def _download_data(output_dir: str, headless: bool = True, strategy_name: str = None) -> list[str]:
     """
     Internal function to run the scraper and download data.
-    Returns the path to the downloaded (converted) file.
+    Returns the list of downloaded file paths.
     """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -105,9 +180,11 @@ def _download_data(output_dir: str, headless: bool = True, strategy_name: str = 
     typer.echo(f"Starting download to {output_dir}...")
     scraper = BandtrassScraperAdapter(headless=headless)
     try:
-        file_path = scraper.download_data(output_dir, strategy=strategy)
-        typer.echo(f"Download completed: {file_path}")
-        return file_path
+        file_paths = scraper.download_data(output_dir, strategy=strategy)
+        typer.echo(f"Download completed: {len(file_paths)} file(s)")
+        for fp in file_paths:
+            typer.echo(f"  - {fp}")
+        return file_paths
     except Exception as e:
         typer.secho(f"Error downloading data: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
@@ -155,25 +232,29 @@ def full(
     strategy: str = typer.Option(None, "--strategy", help="Name of the strategy to use")
 ):
     """
-    Execute full workflow: Download data -> Generate Report.
+    Execute full workflow: Download data -> Merge files -> Generate Report -> Generate Dashboard.
     """
     typer.echo("=== [Step 1] Downloading Data ===")
     # Default data directory for full command
-    downloaded_file = _download_data("data", headless, strategy)
+    downloaded_files = _download_data("data", headless, strategy)
     
     if strategy:
         base, ext = os.path.splitext(output)
         if not base.endswith(f"_{strategy}"):
              output = f"{base}_{strategy}{ext}"
 
-    # Check if downloaded_file is already a report (in reports directory)
-    if "reports" in downloaded_file or "report_" in os.path.basename(downloaded_file):
-        typer.echo(f"\n=== [Step 2] Report already generated: {downloaded_file} ===")
-        # Use the existing report file
-        final_report = downloaded_file
+    # 여러 파일을 하나의 report로 병합
+    typer.echo("\n=== [Step 2] Merging Downloaded Files ===")
+    if len(downloaded_files) > 1:
+        # 여러 파일을 병합
+        final_report = _merge_downloaded_files(downloaded_files, strategy, start_year, end_year)
+    elif len(downloaded_files) == 1:
+        # 단일 파일이면 기존 _generate_report 사용
+        typer.echo("Single file downloaded, generating report...")
+        final_report = _generate_report(downloaded_files[0], start_year, end_year, output)
     else:
-        typer.echo("\n=== [Step 2] Generating Report ===")
-        final_report = _generate_report(downloaded_file, start_year, end_year, output)
+        typer.secho("Error: No files downloaded", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
     
     typer.echo("\n=== [Step 3] Generating Dashboard ===")
     dashboard_output = "reports/dashboard.xlsx"
