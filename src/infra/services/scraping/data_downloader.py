@@ -12,11 +12,6 @@ def download_data(page: Page, save_dir: str, filename: str) -> str:
     """
     조회 결과에서 데이터를 다운로드하여 Excel 파일로 저장합니다.
     
-    Steps:
-        11. 수출 금액 셀 클릭 → 상세 팝업 열기
-        12. 팝업에서 다운로드 버튼 클릭
-        13. Excel 파일로 저장
-    
     Args:
         page: Playwright Page 객체
         save_dir: 저장 디렉토리 경로
@@ -28,63 +23,94 @@ def download_data(page: Page, save_dir: str, filename: str) -> str:
     Raises:
         Exception: 팝업을 열 수 없거나 다운로드에 실패한 경우
     """
-    # [11] 첫 번째 행의 수출 금액 셀 클릭 - 팝업 열림
-    print(f"  [11] Clicking first row's export amount cell")
+    popup = _open_detail_popup(page)
+    _wait_and_save_screenshot(popup, save_dir, filename)
+    download = _trigger_download_with_listeners(popup, page)
+    return _save_download_file(download, save_dir, filename)
+
+
+def _open_detail_popup(page: Page) -> Page:
+    """첫 번째 행의 수출 금액 셀을 클릭하여 상세 팝업을 엽니다."""
+    print("  [11] Clicking first row's export amount cell")
     export_amt_cell = page.locator('td[aria-describedby="table_list_1_EX_AMT"] font').first
     export_amt_cell.wait_for()
     
-    # 팝업 이벤트 대기 시작
-    print(f"  → Waiting for popup to open...")
+    print("  → Waiting for popup to open...")
     try:
         with page.expect_popup(timeout=5000) as popup_info:
             export_amt_cell.click()
         popup = popup_info.value
         popup.wait_for_load_state()
-        print(f"  → Popup opened successfully")
+        print("  → Popup opened successfully")
+        return popup
     except Exception as e:
         print(f"  → Popup event timeout: {e}")
-        # 이미 열린 팝업이 있는지 확인
-        contexts = page.context.pages
-        if len(contexts) > 1:
-            popup = contexts[-1]
-            print(f"  → Using existing popup")
-        else:
-            raise Exception("Failed to open detail popup")
-    
-    # 팝업 로드 대기 (5초)
-    print(f"  → Waiting 5 seconds for popup to fully load...")
+        return _get_existing_popup(page)
+
+
+def _get_existing_popup(page: Page) -> Page:
+    """이미 열려있는 팝업을 찾아 반환합니다."""
+    contexts = page.context.pages
+    if len(contexts) > 1:
+        print("  → Using existing popup")
+        return contexts[-1]
+    raise Exception("Failed to open detail popup")
+
+
+def _wait_and_save_screenshot(popup: Page, save_dir: str, filename: str) -> None:
+    """팝업 로드를 대기하고 스크린샷을 저장합니다."""
+    print("  → Waiting 5 seconds for popup to fully load...")
     popup.wait_for_timeout(5000)
     
-    # 스크린샷 촬영
     screenshot_dir = os.path.join(save_dir, "screenshots")
     os.makedirs(screenshot_dir, exist_ok=True)
     screenshot_path = os.path.join(screenshot_dir, f"{filename}_popup.png")
     popup.screenshot(path=screenshot_path)
     print(f"  → Screenshot saved: {screenshot_path}")
+
+
+def _trigger_download_with_listeners(popup: Page, page: Page):
+    """다운로드 버튼을 클릭하고 다운로드 이벤트를 대기합니다."""
+    download_btn = _find_download_button(popup)
+    download_lists = _setup_download_listeners(popup, page)
+    dialog_count = _setup_dialog_listener(popup, page)
     
-    # [12] 팝업 내의 다운로드 버튼 클릭
-    print(f"  [12] Clicking download button in popup")
+    _click_download_button(download_btn)
+    _wait_for_download_start(popup, download_lists['popup'], download_lists['page'], dialog_count)
+    
+    return _get_download_object(download_lists['popup'], download_lists['page'], dialog_count[0])
+
+
+def _find_download_button(popup: Page):
+    """다운로드 버튼을 찾습니다."""
+    print("  [12] Clicking download button in popup")
     download_btn = popup.locator('a[href*="GridtoExcel"]')
     download_btn.wait_for(state='visible', timeout=10000)
-    print(f"  → Download button found!")
-    
-    # 다운로드 이벤트 리스너 추가
+    print("  → Download button found!")
+    return download_btn
+
+
+def _setup_download_listeners(popup: Page, page: Page) -> dict:
+    """다운로드 이벤트 리스너를 설정합니다."""
     download_from_popup = []
     download_from_page = []
     
-    def on_popup_download(download):
-        print(f"  → [EVENT] Download event detected from POPUP!")
-        download_from_popup.append(download)
+    popup.once('download', lambda d: (
+        print("  → [EVENT] Download event detected from POPUP!"),
+        download_from_popup.append(d)
+    ))
+    page.once('download', lambda d: (
+        print("  → [EVENT] Download event detected from MAIN PAGE!"),
+        download_from_page.append(d)
+    ))
     
-    def on_page_download(download):
-        print(f"  → [EVENT] Download event detected from MAIN PAGE!")
-        download_from_page.append(download)
-    
-    popup.once('download', on_popup_download)
-    page.once('download', on_page_download)
-    
-    # Dialog 이벤트 리스너 추가 (confirm 대화상자 자동 수락)
+    return {'popup': download_from_popup, 'page': download_from_page}
+
+
+def _setup_dialog_listener(popup: Page, page: Page) -> list:
+    """Dialog 이벤트 리스너를 설정합니다."""
     dialog_count = [0]
+    
     def on_dialog(dialog):
         dialog_count[0] += 1
         msg = dialog.message
@@ -93,52 +119,56 @@ def download_data(page: Page, save_dir: str, filename: str) -> str:
         try:
             dialog.accept()
             print(f"  → [DIALOG #{dialog_count[0]}] Accepted")
-        except Exception as e:
+        except Exception:
             print(f"  → [DIALOG #{dialog_count[0]}] Already handled")
     
     popup.on('dialog', on_dialog)
     page.on('dialog', on_dialog)
-    
-    # 버튼 클릭
-    print(f"  → Clicking download button...")
+    return dialog_count
+
+
+def _click_download_button(download_btn) -> None:
+    """다운로드 버튼을 클릭합니다."""
+    print("  → Clicking download button...")
     download_btn.click()
-    
-    # 다운로드 이벤트 대기 (최대 30초)
-    print(f"  → Waiting for download to start (max 30 seconds)...")
+
+
+def _wait_for_download_start(popup: Page, downloads_popup: list, downloads_page: list, dialog_count: list) -> None:
+    """다운로드가 시작될 때까지 대기합니다."""
+    print("  → Waiting for download to start (max 30 seconds)...")
     max_wait = 30
     elapsed = 0
-    interval = 1
     
     while elapsed < max_wait:
-        if download_from_popup or download_from_page:
+        if downloads_popup or downloads_page:
             break
-        popup.wait_for_timeout(interval * 1000)
-        elapsed += interval
+        popup.wait_for_timeout(1000)
+        elapsed += 1
         if elapsed % 5 == 0:
             print(f"  → Still waiting... ({elapsed}s elapsed, {dialog_count[0]} dialogs)")
+
+
+def _get_download_object(downloads_popup: list, downloads_page: list, dialog_count: int):
+    """다운로드 객체를 반환합니다."""
+    print(f"  → Total dialogs: {dialog_count}")
+    print(f"  → Downloads from popup: {len(downloads_popup)}")
+    print(f"  → Downloads from page: {len(downloads_page)}")
     
-    # 결과 확인
-    print(f"  → Total dialogs: {dialog_count[0]}")
-    print(f"  → Downloads from popup: {len(download_from_popup)}")
-    print(f"  → Downloads from page: {len(download_from_page)}")
-    
-    # 다운로드 객체 가져오기
-    download = None
-    if download_from_popup:
-        download = download_from_popup[0]
-        print(f"  → Using download from popup")
-    elif download_from_page:
-        download = download_from_page[0]
-        print(f"  → Using download from main page")
+    if downloads_popup:
+        print("  → Using download from popup")
+        return downloads_popup[0]
+    elif downloads_page:
+        print("  → Using download from main page")
+        return downloads_page[0]
     else:
-        raise Exception(f"No download event triggered after {elapsed} seconds. Dialogs: {dialog_count[0]}")
-    
-    # [13] 파일 저장
-    print(f"  [13] Download accepted")
+        raise Exception(f"No download event triggered. Dialogs: {dialog_count}")
+
+
+def _save_download_file(download, save_dir: str, filename: str) -> str:
+    """다운로드된 파일을 저장합니다."""
+    print("  [13] Download accepted")
     os.makedirs(save_dir, exist_ok=True)
     file_path = os.path.join(save_dir, f"{filename}.xlsx")
     download.save_as(file_path)
-    
     print(f"  → Downloaded: {file_path}")
-    
     return file_path
