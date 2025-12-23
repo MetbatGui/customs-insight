@@ -250,7 +250,7 @@ class TestStrategyFromToml(unittest.TestCase):
         self.assertEqual(strategy.items[1].name, "미용기기")
     
     def test_parse_pharma_research_toml(self):
-        """파마리서치.toml 파싱 (필터 없음)"""
+        """파마리서치.toml 파싱 (국내지역 필터)"""
         toml_path = os.path.join(self.strategies_dir, "파마리서치.toml")
         
         with open(toml_path, "rb") as f:
@@ -259,7 +259,9 @@ class TestStrategyFromToml(unittest.TestCase):
         strategy = Strategy.from_toml_dict(toml_dict)
         
         self.assertEqual(strategy.name, "파마리서치")
-        self.assertEqual(len(strategy.items[0].filters), 0)
+        # 파마리서치는 이제 국내지역 필터가 있음
+        self.assertEqual(len(strategy.items[0].filters), 1)
+        self.assertIsInstance(strategy.items[0].filters[0], DomesticRegionFilter)
     
     def test_parse_samyang_toml(self):
         """삼양.toml 파싱 (다중 지역)"""

@@ -10,7 +10,7 @@ import tomllib
 import os
 import io
 import sys
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from src.domain.models import Strategy
 from src.infra.services.strategy_executor import StrategyExecutor
 
@@ -27,6 +27,168 @@ class TestStrategyExecutor(unittest.TestCase):
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
         self.strategies_dir = os.path.join(self.project_root, "strategies")
+        
+        # scraping 모듈 함수들을 Mock
+        self.search_item_patcher = patch('src.infra.services.strategy_executor.search_item')
+        self.apply_filters_patcher = patch('src.infra.services.strategy_executor.apply_filters')
+        self.download_data_patcher = patch('src.infra.services.strategy_executor.download_data')
+        
+        self.mock_search_item = self.search_item_patcher.start()
+        self.mock_apply_filters = self.apply_filters_patcher.start()
+        self.mock_download_data = self.download_data_patcher.start()
+        
+        # download_data가 파일 경로를 반환하도록 설정
+        self.mock_download_data.side_effect = lambda page, save_dir, filename: f"{save_dir}/{filename}.xlsx"
+    
+    def tearDown(self):
+        """테스트 정리"""
+        self.search_item_patcher.stop()
+        self.apply_filters_patcher.stop()
+        self.download_data_patcher.stop()
+    
+    def _load_strategy(self, filename: str) -> Strategy:
+        """TOML 파일에서 Strategy 로드"""
+        toml_path = os.path.join(self.strategies_dir, filename)
+        
+        with open(toml_path, "rb") as f:
+            toml_dict = tomllib.load(f)
+        
+        return Strategy.from_toml_dict(toml_dict)
+    
+    def _capture_output(self, func, *args, **kwargs):
+        """함수 실행 중 출력 캡처"""
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        
+        try:
+            result = func(*args, **kwargs)
+        finally:
+            sys.stdout = sys.__stdout__
+        
+        return result, captured_output.getvalue()
+    
+    def test_execute_apr_strategy(self):
+        """에이피알 전략 실행 테스트 (2개 품목, 국내지역 필터)"""
+        strategy = self._load_strategy("에이피알.toml")
+        
+        results, output = self._capture_output(
+            self.executor.execute,
+            self.mock_page,
+            "data",
+            strategy
+        )
+        
+        # 결과 검증
+        self.assertEqual(len(results), 2, "Should download 2 files (2 items)")
+        self.assertIn("화장품", results[0])
+        self.assertIn("미용기기", results[1])
+        
+        # 로그 검증
+        self.assertIn("에이피알", output)
+        
+        # 품목 1: 화장품
+        self.assertIn("화장품", output)
+        self.assertIn("3304991000", output)
+        
+        # 품목 2: 미용기기
+        self.assertIn("미용기기", output)
+        self.assertIn("8543702020", output)
+        
+        # Mock 호출 검증
+        self.assertEqual(self.mock_search_item.call_count, 2)  # 2개 품목
+        self.assertEqual(self.mock_apply_filters.call_count, 2)  # 2개 필터
+        self.assertEqual(self.mock_download_data.call_count, 2)  # 2개 다운로드
+    
+    def test_execute_nongshim_strategy(self):
+        """농심 전략 실행 테스트 (1개 품목, 국내지역 필터)"""
+        strategy = self._load_strategy("농심.toml")
+        
+        results, output = self._capture_output(
+            self.executor.execute,
+            self.mock_page,
+            "data",
+            strategy
+        )
+        
+        # 결과 검증
+        self.assertEqual(len(results), 1, "Should download 1 file (1 item)")
+        self.assertIn("라면", results[0])
+        
+        # 로그 검증
+        self.assertIn("농심", output)
+        self.assertIn("라면", output)
+        self.assertIn("1902301010", output)
+    
+    def test_execute_hyosung_strategy(self):
+        """효성중공업 전략 실행 테스트 (1개 품목, 세관 필터)"""
+        strategy = self._load_strategy("효성중공업.toml")
+        
+        results, output = self._capture_output(
+            self.executor.execute,
+            self.mock_page,
+            "data",
+            strategy
+        )
+        
+        # 결과 검증
+        self.assertEqual(len(results), 1, "Should download 1 file (1 item)")
+        
+        # 로그 검증
+        self.assertIn("효성중공업", output)
+        self.assertIn("8504230000", output)
+    
+    def test_execute_pharma_research_strategy(self):
+        """파마리서치 전략 실행 테스트"""
+        strategy = self._load_strategy("파마리서치.toml")
+        
+        results, output = self._capture_output(
+            self.executor.execute,
+            self.mock_page,
+            "data",
+            strategy
+        )
+        
+        # 결과 검증
+        self.assertEqual(len(results), 1, "Should download 1 file (1 item)")
+        
+        # 로그 검증
+        self.assertIn("파마리서치", output)
+        self.assertIn("3304999000", output)
+    
+    def test_strategy_items_count(self):
+        """각 전략의 품목 수 검증"""
+        apr = self._load_strategy("에이피알.toml")
+        nongshim = self._load_strategy("농심.toml")
+        
+        self.assertEqual(len(apr.items), 2, "APR should have 2 items")
+        self.assertEqual(len(nongshim.items), 1, "Nongshim should have 1 item")
+    
+    def test_filter_type_detection(self):
+        """필터 타입별 분기 테스트"""
+        # 국내지역 필터
+        domestic_strategy = self._load_strategy("농심.toml")
+        _, domestic_output = self._capture_output(
+            self.executor.execute,
+            self.mock_page,
+            "data",
+            domestic_strategy
+        )
+        self.assertIn("Region filters", domestic_output)
+        
+        # 세관 필터
+        customs_strategy = self._load_strategy("효성중공업.toml")
+        _, customs_output = self._capture_output(
+            self.executor.execute,
+            self.mock_page,
+            "data",
+            customs_strategy
+        )
+        self.assertIn("효성중공업", customs_output)
+
+
+if __name__ == '__main__':
+    unittest.main()
+
     
     def _load_strategy(self, filename: str) -> Strategy:
         """TOML 파일에서 Strategy 로드"""
@@ -77,7 +239,7 @@ class TestStrategyExecutor(unittest.TestCase):
         
         # 품목 2: 미용기기
         self.assertIn("미용기기", output)
-        self.assertIn("8543702010", output)
+        self.assertIn("8543702020", output)
         
         # 14단계 워크플로우 검증
         self.assertIn("[1]", output)  # 품목/성질별
